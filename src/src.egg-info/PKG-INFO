@@ -1,0 +1,14 @@
+Metadata-Version: 1.2
+Name: src
+Version: 0.1.1
+Summary: package for deep survival
+Home-page: https://github.com/MoritzWag/DeepSurvival
+Author: Moritz Wagner
+Author-email: moritzwagner95@hotmail.de
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
