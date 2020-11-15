@@ -2,23 +2,19 @@ import torch
 import torch.nn as nn 
 
 from abc import ABC, abstractmethod
+from src.evaluator import Evaluator
 
-class BaseModel(ABC):
+class BaseModel(ABC, Evaluator):
     """
     """
-    def __init__(self):
-        pass 
+    def __init__(self, **kwargs):
+        super(BaseModel, self).__init__(**kwargs)
+
+    @abstractmethod
+    def _loss_function(self):
+        pass
     
     @abstractmethod
-    def train_one_batch(self):
-        pass 
-
-    def validate(self):
-        pass 
-
-    def predict(self):
-        pass 
-
-    def evaluate(self):
-        pass 
+    def _orthogonalize(self):
+        pass
 

@@ -1,0 +1,30 @@
+model_params:
+    model_name: DeepCoxPH
+    structured_params:
+        structured_input_dim: 2
+    deep_params:
+        architecture: 'cnn'
+        architecture_params: 
+            out_dim: 10
+    wide_deep_params:
+        orthogonalize: True
+        output_dim: 1
+    
+model_hyperparams:
+    loss_type: 'cox_ph'
+  
+exp_params:
+    dataset: 'mnist'
+    data_path: 'data/coxph/'
+    batch_size: 64
+    learning_rate: 0.005
+    weight_decay: 0.0
+    scheduler_gamma: 0.95
+
+trainer_params:
+    gpu: 0
+    max_epochs: 25
+  
+logging_params:
+    manual_seed: 1234
+    save_dir: 'logging'

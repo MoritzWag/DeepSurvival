@@ -3,13 +3,43 @@ import pandas as pd
 import pdb
 
 
-def make_risk_score_for_groups(y, 
+
+def simulate_mm_coxph_riskscores(y, n_groups, seed):
+    """
+    """
+    random = np.random.RandomState(seed)
+    num_obs = y.shape[0]
+    x1 = np.random.uniform(-2, 3, size=num_obs)
+    x2 = np.random.uniform(0, 5, size=num_obs)
+
+    df = pd.DataFrame(data={'labels': y, 'x1': x1, 'x2': x2})
+    
+    classes = np.unique(y)
+    group_assignment = {}
+    group_members = {}
+    groups = random.randint(n_groups, size=classes.shape)
+    for label, group in zip(classes, groups):
+        group_assignment[label] = group
+        group_members.setdefault(group, []).append(label)
+
+    df['risk_scores'] = -0.5 + 0.25*df['x1'] - 0.3*df['x2'] \
+                                + 0.5*(df['labels'] == 0) \
+                                - 1*(df['labels'] == 1) \
+                                + 0.3*(df['labels'] == 2) \
+                                - 0.8*(df['labels'] == 3)
+
+    return df
+
+
+
+
+def simulate_um_coxph_riskscores(y, 
                                n_groups, 
                                seed):
     """
     """
-    random = np.random.RandomState(seed)
 
+    random = np.random.RandomState(seed)
     classes = np.unique(y)
     group_assignment = {}
     group_members = {}
@@ -60,3 +90,9 @@ def generate_survival_time(num_samples,
     observed_event = t <= c
     observed_time = np.where(observed_event, t, c)
     return observed_time, observed_event
+
+
+
+
+
+    
