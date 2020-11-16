@@ -51,7 +51,6 @@ class Visualizer(nn.Module):
     
         fig.colorbar(im, cax=fig.add_axes([0.95, 0.25, 0.03, 0.5]))
 
-        #plt.show()
         storage_path = os.path.expanduser(storage_path)
         storage_path = f"{storage_path}/{run_name}"
         if not os.path.exists(storage_path):
@@ -71,9 +70,6 @@ class Visualizer(nn.Module):
         vutils.save_image(attributions.data, 
                           f"{storage_path}/integrated_gradients.png")
 
-
-
-        
 
     def overlay_function(self, images, integrated_gradients):
         return np.clip(0.7 * images + 0.5 * integrated_gradients, 0, 255)
