@@ -70,7 +70,7 @@ class DeepSurvExperiment(pl.LightningModule):
         return val_loss
 
     def validation_epoch_end(self, outputs):
-
+        
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
@@ -89,14 +89,24 @@ class DeepSurvExperiment(pl.LightningModule):
         return test_loss
 
     def test_epoch_end(self, outputs):
-        
+        torch.set_grad_enabled(True)
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-        plot_train_progress(self.train_history, 
-                            storage_path=f"logs/{self.run_name}/{self.params['dataset']}/training/")
-        plot_train_progress(self.train_history, 
-                    storage_path=f"logs/{self.run_name}/{self.params['dataset']}/validation/")
+        # plot_train_progress(self.train_history, 
+        #                     storage_path=f"logs/{self.run_name}/{self.params['dataset']}/training/")
+        # plot_train_progress(self.train_history, 
+        #             storage_path=f"logs/{self.run_name}/{self.params['dataset']}/validation/")
+
+        images, tabular_data = self.model.accumulate_batches(data=self.test_gen)
+        images, tabular_data = images[:4, :, :, ], tabular_data[:4, :]
+
+        integrated_gradients = self.model.integrated_gradients(images=images, tabular_data=tabular_data)
+
+        self.model.visualize_integrated_gradients(images=images, 
+                                                  integrated_gradients=integrated_gradients,
+                                                  storage_path="xxx",
+                                                  run_name=self.run_name)
 
         return {'avg_loss': avg_loss}
 
@@ -147,11 +157,11 @@ class DeepSurvExperiment(pl.LightningModule):
 
         val_data = utils.ImageData(features=X, df=df)
 
-        val_gen = DataLoader(dataset=val_data,
+        self.val_gen = DataLoader(dataset=val_data,
                                batch_size=self.params['batch_size'],
                                shuffle=False)
         
-        return val_gen
+        return self.val_gen
 
     def test_dataloader(self):
         """
@@ -162,8 +172,8 @@ class DeepSurvExperiment(pl.LightningModule):
 
         test_data = utils.ImageData(features=X, df=df)
 
-        test_gen = DataLoader(dataset=test_data,
+        self.test_gen = DataLoader(dataset=test_data,
                                batch_size=self.params['batch_size'],
                                shuffle=False)
         
-        return test_gen
+        return self.test_gen

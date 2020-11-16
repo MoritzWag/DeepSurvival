@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd 
 import numpy as np 
 import pdb 
-
+import os
 
 def plot_train_progress(history, storage_path):
     """plot loss progress based on training/validation history
