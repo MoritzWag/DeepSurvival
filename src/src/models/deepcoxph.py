@@ -36,7 +36,7 @@ class DeepCoxPH(BaseModel):
     def forward(self, structured, unstructured):
 
         unstructured = self.deep(unstructured)
-        if self._orthogonalize:
+        if self.orthogonalize:
             unstructured_orth = self._orthogonalize(structured, unstructured)
             features_concatenated = torch.cat((structured, unstructured_orth), axis=1)
         else:
