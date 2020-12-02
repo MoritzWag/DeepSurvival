@@ -15,15 +15,16 @@ class Visualizer(nn.Module):
     def __init__(self, **kwargs):
         super(Visualizer, self).__init__(**kwargs)
     
-    def visualize_integrated_gradients(self, 
-                                       images, 
-                                       integrated_gradients, 
-                                       storage_path,
-                                       run_name):
+    def visualize_attributions(self, 
+                               images, 
+                               attributions,
+                               method,
+                               storage_path,
+                               run_name):
         """
         """
         fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(10, 10))
-        cmap_bound = np.abs(integrated_gradients).max()
+        cmap_bound = np.abs(attributions).max()
 
         for i in range(len(images)):
             # original image
@@ -31,7 +32,7 @@ class Visualizer(nn.Module):
             ax[i, 0].set_title('Original Image')
 
             # attributions 
-            attr = integrated_gradients[i, :, :, :].squeeze()
+            attr = attributions[i, :, :, :].squeeze()
             im = ax[i, 1].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='PiYG')
 
             # positive attributions
@@ -56,10 +57,10 @@ class Visualizer(nn.Module):
         if not os.path.exists(storage_path):
             os.makedirs(storage_path)
         
-        plt.savefig(f"{storage_path}/integrated_grad_main.png", dpi=300)
+        plt.savefig(f"{storage_path}/{method}.png", dpi=300)
 
         attributions = self.overlay_function(images=images, 
-                                             integrated_gradients=integrated_gradients)
+                                             attributions=attributions)
         
 
         storage_path = os.path.expanduser(storage_path)
@@ -68,8 +69,9 @@ class Visualizer(nn.Module):
             os.makedirs(storage_path)
         
         vutils.save_image(attributions.data, 
-                          f"{storage_path}/integrated_gradients.png")
+                          f"{storage_path}/{method}.png")
 
 
-    def overlay_function(self, images, integrated_gradients):
-        return np.clip(0.7 * images + 0.5 * integrated_gradients, 0, 255)
+    def overlay_function(self, images, attributions):
+        return np.clip(0.7 * images + 0.5 * attributions, 0, 255)
+
