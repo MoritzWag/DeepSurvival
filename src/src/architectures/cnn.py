@@ -30,7 +30,6 @@ class CNN(nn.Module):
                              out_features=self.out_dim)
 
     def forward(self, x):
-        #pdb.set_trace()
         x = self.conv1(x)
         x = self.relu1(x)
         x = self.maxpool1(x)
