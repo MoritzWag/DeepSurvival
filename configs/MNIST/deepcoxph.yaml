@@ -23,7 +23,7 @@ exp_params:
 
 trainer_params:
     gpu: 0
-    max_epochs: 2
+    max_epochs: 40
   
 logging_params:
     manual_seed: 1234

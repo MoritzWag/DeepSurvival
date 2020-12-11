@@ -108,9 +108,9 @@ class DeepSurvExperiment(pl.LightningModule):
         #riskset = utils.make_riskset(times)
         riskscores = self.forward(tabular_data, images.float())
 
-        self.model.get_measures(riskscore=riskscores,
-                                events=events,
-                                times=times)
+        # self.model.get_measures(riskscore=riskscores,
+        #                         events=events,
+        #                         times=times)
         
         
         ## derive feature attributions
@@ -119,7 +119,11 @@ class DeepSurvExperiment(pl.LightningModule):
         IG = IntegratedGradients()
         integrated_gradients = IG.integrated_gradients(model=self.model,
                                                        images=images,
-                                                       tabular_data=tabular_data)
+                                                       tabular_data=tabular_data,
+                                                       length=9,
+                                                       baseline=images[1, :, :, :],
+                                                       storage_path="euclidean_morph",
+                                                       run_name=self.run_name)
         wasserstein_ig = IG.wasserstein_integrated_gradients(model=self.model,
                                                              images=images,
                                                              img2=images[1, :, :, :],

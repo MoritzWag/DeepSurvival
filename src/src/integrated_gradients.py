@@ -36,15 +36,29 @@ class IntegratedGradients(nn.Module):
         gradients = np.array(gradients)
         return gradients
 
-    def integrated_gradients(self, model, images, tabular_data, baseline=None, steps=50):
+    def integrated_gradients(self, 
+                             model, 
+                             images, 
+                             tabular_data,
+                             storage_path, 
+                             run_name,
+                             baseline=None, 
+                             length=9):
         """
         """
         if baseline is None:
             baseline = 0 * images
-        scaled_inputs = [baseline + (float(i) / steps) * (images - baseline) for i in range(0, steps + 1)]
+        scaled_inputs = [baseline + (float(i) / length) * (images - baseline) for i in range(0, length + 1)]
         gradients = self.calculate_gradients(model=model, images=scaled_inputs, tabular_data=tabular_data)
         avg_gradients = np.average(gradients[:-1], axis=0)
         integrated_gradient = (images - baseline) * avg_gradients
+        # scaled_inputs = [torch.Tensor(np.stack(im_channels.detach().numpy(), axis=0)) for im_channels in scaled_inputs]
+        # pdb.set_trace()
+        # storage_path = os.path.expanduser(storage_path)
+        # storage_path = f"{storage_path}/{run_name}"
+        # if not os.path.exists(storage_path):
+        #     os.makedirs(storage_path)
+        # save_image(scaled_inputs, f"{storage_path}/euclidean_morph.png", nrow=length, normalize=False, range=(0,1))
 
         return integrated_gradient
 
@@ -58,10 +72,11 @@ class IntegratedGradients(nn.Module):
                                          run_name,
                                          baseline=None, 
                                          steps=50,
-                                         epsilon=30.0):
+                                         epsilon=0.5):
         """
         """
-
+        if img2 is None:
+            baseline_image = images[0] * 0
         baseline_image = img2.unsqueeze(0)
         list_outs_OT = []
         for i in range(images.shape[0]):
@@ -78,7 +93,7 @@ class IntegratedGradients(nn.Module):
             for dim in range(1):
                 out_OT.append([])
                 P = sinkhorn(Q[dim, :, 0], Q[dim, :, 1], C, img_size[0], img_size[1], epsilon)
-                for t in tqdm(np.linspace(0,1,length)):
+                for t in tqdm(np.linspace(0,1, length)):
                     out_OT[-1].append(max_val - generate_interpolation(img_size[0],img_size[1],P,t)*((1-t)*Q_counts[dim,0,0] + t*Q_counts[dim,0,1]))
 
             list_out_OT = [torch.Tensor(np.stack(im_channels, axis=0)) for im_channels in zip(*out_OT)]
@@ -90,15 +105,17 @@ class IntegratedGradients(nn.Module):
             scaled_input = torch.stack([torch.Tensor(im[l]).reshape(1, *img_size) for im in list_outs_OT])
             scaled_inputs.append(scaled_input)
 
-        storage_path = os.path.expanduser(storage_path)
-        storage_path = f"{storage_path}/{run_name}"
-        if not os.path.exists(storage_path):
-            os.makedirs(storage_path)
 
         gradients = self.calculate_gradients(model=model, images=scaled_inputs, tabular_data=tabular_data)
         avg_gradients = np.average(gradients[:-1], axis=0)
         images_basline = torch.cat(images.shape[0]*[baseline_image])
         integrated_gradient = (images - images_basline) * avg_gradients
+
+        storage_path = os.path.expanduser(storage_path)
+        storage_path = f"{storage_path}/{run_name}"
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
 
         save_image(list_out_OT, f"{storage_path}/wasserstein_morph.png", nrow=length, normalize=False, range=(0,1))
 

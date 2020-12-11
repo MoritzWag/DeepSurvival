@@ -44,6 +44,7 @@ def get_data(args):
 
     X_test = testset.data.unsqueeze(1) / 255.
     Y_test = testset.targets.numpy()
+    pdb.set_trace()
 
     Y = np.concatenate((Y_train, Y_test))
     
