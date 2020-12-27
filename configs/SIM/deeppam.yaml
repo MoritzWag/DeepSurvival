@@ -1,5 +1,5 @@
 model_params:
-    model_name: DeepCoxPH
+    model_name: DeepPAM
     structured_params:
         structured_input_dim: 2
     deep_params:
@@ -15,9 +15,9 @@ model_hyperparams:
   
 exp_params:
     dataset: 'mnist'
-    data_path: 'data/coxph2/'
-    base_folder: 'mnist2'
-    data_type: 'coxph'
+    data_path: 'data/coxph/'
+    base_folder: 'simulation'
+    data_type: 'ped'
     batch_size: 64
     learning_rate: 0.005
     weight_decay: 0.0
@@ -25,7 +25,7 @@ exp_params:
 
 trainer_params:
     gpu: 0
-    max_epochs: 40
+    max_epochs: 1
   
 logging_params:
     manual_seed: 1234

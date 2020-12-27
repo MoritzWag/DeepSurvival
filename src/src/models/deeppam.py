@@ -1,9 +1,9 @@
 
 import torch 
+import pdb
 
 from torch import nn
 from src.models.base import BaseModel
-
 
 
 class DeepPAM(BaseModel):
@@ -11,75 +11,108 @@ class DeepPAM(BaseModel):
     """
     def __init__(self,
                  deep: nn.Module, 
+                 structured_input_dim: int,
                  output_dim: int,
                  orthogonalize: bool,
-                 **params):
-        super(DeepPAM, self).__init__()
+                 **kwargs):
+        super(DeepPAM, self).__init__(**kwargs)
 
-        self.wide = wide
         self.deep = deep 
         self.output_dim = output_dim
+        self.structured_input_dim = structured_input_dim
         self.orthogonalize = orthogonalize
-    
-    def _orthogonalize(self, structured, unstructured):
-        pass 
+        self.overall_dim = self.structured_input_dim + self.deep.fc3.out_features
+        self.linear = nn.Linear(in_features=self.overall_dim, out_features=self.output_dim)
 
-    def forward(self, structured, unstructured):
-        pass
+    def forward(self, tabular_data, images, offset, index, splines, **kwargs):
+        # 1.) pass unstructured part through deep network
+        unstructured = self.deep(images)
 
-    def _loss_function(self):
-        pass
+        # 2.) bring latent representation into ped format
+        # 3.) additionally, orthogonalize for each interval seperately
+        unstructured_ped = self.latent_to_ped(unstructured, tabular_data, index)
 
-
-    # def forward(self, 
-    #             structured, 
-    #             unstructured):
-    #     structured_out = self.wide(structured)
-    #     unstructured_out = self.deep(unstructured)
-
-    #     if self.orthogonalize:
-    #         projection_matrix = gram_schmidt(structured_out)
-    #         unstructured_orthogonalized = orthogonalize(projection_matrix, unstructured_out)
-    #         features_concatenated = torch.concatenate((structured_out, unstructured_orthogonalized))
-    #     else:
-    #         features_concatenated = torch.concatenate((structured_out, unstructured_out))
+        # 4.) concatenate unstructured_ped with structured 
+        features_concatenated = torch.cat((tabular_data, unstructured_ped), axis=1)
         
-    #     # linear layer
-    #     out = self.linear(features_concatenated)
-    #     return out
+        # 5.) pass through last linear layer
+        out = self.linear(features_concatenated.float())
+        out = out.squeeze(1)
 
+        # 6.) add offset and splines
+        splines = torch.sum(splines, dim=1)
+        out = out + offset + splines
+        hazard = torch.exp(out)
 
+        return hazard
 
+    def _loss_function(self, pred_status, true_status, epsilon=1e-07):
+        """poisson_loss
+        """
+        loss = torch.mean(pred_status - true_status * torch.log(pred_status + epsilon))
 
-def gram_schmidt(vv):
-    """
-    """
-    def projection(u, v):
-        return (v * u).sum() / (u * u).sum() * u
+        return loss
 
-    nk = vv.size(0)
-    uu = torch.zeros_like(vv, device=vv.device)
-    uu[:, 0] = vv[:, 0].clone()
-    for k in range(1, nk):
-        vk = vv[k].clone()
-        uk = 0
-        for j in range(0, k):
-            uj = uu[:, j].clone()
-            uk = uk + projection(uj, vk)
-        uu[:, k] = vk - uk
-    for k in range(nk):
-        uk = uu[:, k].clone()
-        uu[:, k] = uk / uk.norm()
-    return uu
+    def latent_to_ped(self, unstructured, structured, index):
+        """bring latent representation into ped format
+        """
+        num_of_intervals = torch.unique(index, return_counts=True)[1]
 
+        structured_compressed = []
+        for idx in range(num_of_intervals.shape[0]):
+            num_obs = torch.sum(num_of_intervals[0:idx+1])
+            structured_obs = structured[num_obs -1]
+            structured_compressed.append(structured_obs)
+        
+        structured = torch.vstack(structured_compressed)
+        unstructured_orth = self._orthogonalize(structured, unstructured)
+        unstructured_ped = []
+        for idx in range(unstructured.shape[0]):
+            unstructured_instance = unstructured_orth[idx].unsqueeze(0)
+            ped_instance = torch.repeat_interleave(unstructured_instance,
+                                                   repeats=num_of_intervals[idx],
+                                                   dim=0)
+            unstructured_ped.append(ped_instance)
+        
+        unstructured_ped = torch.vstack(unstructured_ped)
+        
+        return unstructured_ped
+    
+    def _accumulate_batches(self, data, cuda=False):
+        """
+        """
+        images = []
+        tabular_data = []
+        offsets = []
+        ped_statuses = []
+        indeces = []
+        splines = []
+        for batch, data in enumerate(data):
+            image = data[0]
+            tabular_date = data[1]
+            offset = data[2]
+            ped_status = data[3]
+            index = data[4]
+            spline = data[5]
 
-def orthogonalize(projection_matrix, feature_matrix):
-    """
-    """
-    n = projection_matrix.dim()[0]
-    identity = torch.eye(n)
+            if cuda: 
+                image = image.cuda()
+                tabular_date = tabular_date.cuda()
+            images.append(image)
+            tabular_data.append(tabular_date)
+            offsets.append(offset)
+            ped_statuses.append(ped_status)
+            indeces.append(index)
+            splines.append(spline)
 
-    orthogonalized_matrix = identity - projection_matrix
-    orthogonalized_features = orthogonalized_matrix * feature_matrix
+        images = torch.cat(images)
+        tabular_data = torch.cat(tabular_data)
+        offsets = torch.cat(offsets)
+        ped_statuses = torch.cat(ped_statuses)
+        indeces = torch.cat(indeces)
+        splines = torch.cat(splines)
 
-    return orthogonalized_features
+        dict_batches = {'images': images.float(), 'tabular_data': tabular_data, 'offset': offsets,
+                        'ped_status': ped_statuses, 'index': indeces, 'splines': splines}
+
+        return dict_batches

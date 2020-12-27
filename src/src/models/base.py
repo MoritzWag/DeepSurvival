@@ -23,11 +23,50 @@ class BaseModel(ABC, Evaluator, Visualizer):
     @abstractmethod
     def _orthogonalize(self):
         pass
+    
+    @abstractmethod
+    def _accumulate_batches(self):
+        pass
+
+    def _orthogonalize(self, structured, unstructured):
+        """orthogonalize unstructured latent representation of unstructured data
+        on structured data
+        """
+        projection_matrix = self.calculate_projection_matrix(structured)
+        unstructured_orthogonalized =  self.orthogonalization(projection_matrix, unstructured)
+        
+        return unstructured_orthogonalized
+    
+    def calculate_projection_matrix(self, matrix):
+        """To calculate the projection matrix of X, the following needs to be 
+        calculated: P = x*(xTx)^-1*xT. This can be achieved by applying the gram schmidt algorithm
+
+        Args:
+            matrix: {torch.Tensor} matrix for which the projection matrix needs to be identified. 
+        
+        Returns:
+            projection_matrix: {torch.Tensor} projection matrix
+        """
+
+        Q, R = torch.qr(matrix)
+        xTx_xT = torch.matmul(torch.inverse(R), Q.t())
+        projection_matrix = torch.matmul(matrix, xTx_xT)
+
+        return projection_matrix
+
+    def orthogonalization(self, projection_matrix, feature_matrix):
+        """
+        """
+        num_obs = projection_matrix.shape[0]
+        identity = torch.eye(num_obs)
+        orthogonalized_matrix = identity - projection_matrix
+        orthogonalized_features = torch.matmul(orthogonalized_matrix.float(), feature_matrix)
+
+        return orthogonalized_features
 
     def _build_lpdn_model(self):
         """
         """
-        
         model_parts = tuple(self._modules.keys())
         if len(model_parts) == 1:
             print('only uni-modal model with images')
@@ -68,35 +107,6 @@ class BaseModel(ABC, Evaluator, Visualizer):
             lpdn_model.load_state_dict(state_dict, strict=False)
             
         return lpdn_model 
-
-
-    def accumulate_batches(self, data, cuda=False):
-        """
-        """
-        images = []
-        tabular_data = []
-        events = []
-        times = []
-        for batch, data in enumerate(data):
-            image = data[0]
-            tabular_date = data[1]
-            event = data[2]
-            time = data[3]
-            if cuda: 
-                image = image.cuda()
-                tabular_date = tabular_date.cuda()
-            images.append(image)
-            tabular_data.append(tabular_date)
-            events.append(event)
-            times.append(time)
-
-        images = torch.cat(images)
-        tabular_data = torch.cat(tabular_data)
-        events = torch.cat(events)
-        times = torch.cat(times)
-
-        return images, tabular_data, events, times
-
 
     def save_model(self):
         pass 

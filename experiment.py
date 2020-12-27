@@ -11,10 +11,14 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from src.data import utils
+from src.data import simulations_data
+from src.data.sim_ped import SimPED
+from src.data.sim_coxph import SimCoxPH
 from src.postprocessing import plot_train_progress
 from src.dsap.dsap import DSAP
 from src.dsap.coalition_policies.playergenerators import *
 from src.integrated_gradients import IntegratedGradients
+
 
 
 class DeepSurvExperiment(pl.LightningModule):
@@ -46,28 +50,43 @@ class DeepSurvExperiment(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
 
-        image, tabular_data, event, time = batch
-        riskset = utils.make_riskset(time)
+        if self.params['data_type'] == 'coxph':
+            image, tabular_data, event, time = batch
+            riskset = utils.make_riskset(time)
 
-        riskscore = self.forward(tabular_data, image.float())
-        train_loss = self.model._loss_function(event, riskset, predictions=riskscore)
+            y_pred = self.forward(tabular_data, image.float())
+            train_loss = self.model._loss_function(event, riskset, predictions=y_pred)
 
-        train_history = pd.DataFrame([[value.cpu().detach().numpy() for value in train_loss.values()]],
-                                    columns=[key for key in train_loss.keys()])
+        else:
+            image, tabular_data, offset, ped_status, index, splines = batch
+            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+            train_loss = self.model._loss_function(y_pred, ped_status)
+        
+        train_loss = {'loss': train_loss}
+
+        self.train_history = pd.DataFrame([[value.cpu().detach().numpy() for value in train_loss.values()]],
+                            columns=[key for key in train_loss.keys()])
 
         return train_loss
 
     def validation_step(self, batch, batch_idx):
-
-        image, tabular_data, event, time = batch
-        riskset = utils.make_riskset(time)
         
-        riskscore = self.forward(tabular_data, image.float())
-        val_loss = self.model._loss_function(event, riskset, predictions=riskscore)
+        if self.params['data_type'] == 'coxph':
+            image, tabular_data, event, time = batch
+            riskset = utils.make_riskset(time)
+            
+            y_pred = self.forward(tabular_data, image.float())
+            val_loss = self.model._loss_function(event, riskset, predictions=y_pred)
 
-        val_history = pd.DataFrame([[value.cpu().detach().numpy() for value in val_loss.values()]],
-                            columns=[key for key in val_loss.keys()])
+        else:
+            image, tabular_data, offset, ped_status, index, splines = batch
+            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+            val_loss = self.model._loss_function(y_pred, ped_status)
+        
+        val_loss = {'loss': val_loss}
 
+        self.val_history = pd.DataFrame([[value.cpu().detach().numpy() for value in val_loss.values()]],
+                        columns=[key for key in val_loss.keys()])
 
         return val_loss
 
@@ -76,22 +95,32 @@ class DeepSurvExperiment(pl.LightningModule):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-        return {'avg_loss': avg_loss}#
+        return {'avg_loss': avg_loss}
 
     def test_step(self, batch, batch_idx):
-        image, tabular_data, event, time = batch
-        riskset = utils.make_riskset(time)
 
-        riskscore = self.forward(tabular_data, image.float())
-        test_loss = self.model._loss_function(event, riskset, predictions=riskscore)
+        if self.params['data_type'] == 'coxph':
+            image, tabular_data, event, time = batch
+            riskset = utils.make_riskset(time)
 
-        test_history = pd.DataFrame([[value.cpu().detach().numpy() for value in test_loss.values()]],
+            y_pred = self.forward(tabular_data, image.float())
+            test_loss = self.model._loss_function(event, riskset, predictions=y_pred)
+
+        else:
+            image, tabular_data, offset, ped_status, index, splines = batch
+            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+            test_loss = self.model._loss_function(y_pred, ped_status)
+        
+        test_loss = {'loss': test_loss}
+        
+        self.test_history = pd.DataFrame([[value.cpu().detach().numpy() for value in test_loss.values()]],
                             columns=[key for key in test_loss.keys()])
 
         return test_loss
 
     def test_epoch_end(self, outputs):
 
+        # where/when to set grad_enabled = True?
         torch.set_grad_enabled(True)
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
@@ -99,20 +128,30 @@ class DeepSurvExperiment(pl.LightningModule):
         try:
             plot_train_progress(self.train_history, 
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/training/")
-            plot_train_progress(self.train_history, 
+            plot_train_progress(self.val_history, 
                         storage_path=f"logs/{self.run_name}/{self.params['dataset']}/validation/")
         except:
             pass
 
-        images, tabular_data, events, times = self.model.accumulate_batches(data=self.test_gen)
-        #riskset = utils.make_riskset(times)
-        riskscores = self.forward(tabular_data, images.float())
+        accumulated_batch = self.model._accumulate_batches(data=self.test_gen)
+        eval_data = utils.get_eval_data(batch=accumulated_batch,
+                                        model=self.model)
+        
+        
+        evaluation_data = {**accumulated_batch, **self.eval_data, **eval_data}
+       
+        # get survival cindex and ibs
+        self.model.get_metrics(**evaluation_data)
 
-        # self.model.get_measures(riskscore=riskscores,
-        #                         events=events,
-        #                         times=times)
+        # log metrics
+        for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
+            self.logger.experiment.log_metric(key=key,
+                                              value=value,
+                                              run_id=self.logger.run_id)
         
         
+
+        ##################################################################################################
         ## derive feature attributions
         images, tabular_data = images[:4, :, :, ], tabular_data[:4, :]
         
@@ -179,49 +218,73 @@ class DeepSurvExperiment(pl.LightningModule):
         except:
             return optims
 
-
-
     def train_dataloader(self):
         """
         """
-
-        path = f"{self.params['data_path']}"
-        X, df = utils.load_data(path=path, split='train')
-
-        train_data = utils.ImageData(features=X, df=df)
-
-        train_gen = DataLoader(dataset=train_data,
-                               batch_size=self.params['batch_size'],
-                               shuffle=False)
+        if self.params['data_type'] == 'coxph':
+            train_data = SimCoxPH(root='./data',
+                                  part='train',
+                                  base_folder=self.params['base_folder'],
+                                  data_type=self.params['data_type'])
+            train_gen = DataLoader(dataset=train_data,
+                                   batch_size=self.params['batch_size'],
+                                   shuffle=False)
+        else:
+            train_data = SimPED(root='./data',
+                                part='train',
+                                base_folder=self.params['base_folder'],
+                                data_type=self.params['data_type'])
+            train_gen = DataLoader(dataset=train_data, 
+                                   batch_size=self.params['batch_size'],
+                                   collate_fn=utils.ped_collate_fn,
+                                   shuffle=False)
 
         return train_gen
 
     def val_dataloader(self):
         """
         """
-
-        path = f"{self.params['data_path']}"
-        X, df = utils.load_data(path=path, split='val')
-
-        val_data = utils.ImageData(features=X, df=df)
-
-        self.val_gen = DataLoader(dataset=val_data,
-                               batch_size=self.params['batch_size'],
-                               shuffle=False)
+        if self.params['data_type'] == 'coxph':
+            val_data = SimCoxPH(root='./data',
+                                  part='val',
+                                  base_folder=self.params['base_folder'],
+                                  data_type=self.params['data_type'])
+            self.val_gen = DataLoader(dataset=val_data,
+                                   batch_size=self.params['batch_size'],
+                                   shuffle=False)
+        else:
+            val_data = SimPED(root='./data',
+                                part='val',
+                                base_folder=self.params['base_folder'],
+                                data_type=self.params['data_type'])
+            self.val_gen = DataLoader(dataset=val_data, 
+                                   batch_size=self.params['batch_size'],
+                                   collate_fn=utils.ped_collate_fn,
+                                   shuffle=False)
         
         return self.val_gen
 
     def test_dataloader(self):
         """
         """
+        if self.params['data_type'] == 'coxph':
+            test_data = SimCoxPH(root='./data',
+                                  part='test',
+                                  base_folder=self.params['base_folder'],
+                                  data_type=self.params['data_type'])
+            self.test_gen = DataLoader(dataset=test_data,
+                                   batch_size=self.params['batch_size'],
+                                   shuffle=False)
 
-        path = f"{self.params['data_path']}"
-        X, df = utils.load_data(path=path, split='test')
+        else:
+            test_data = SimPED(root='./data',
+                                part='test',
+                                base_folder=self.params['base_folder'],
+                                data_type=self.params['data_type'])
+            self.test_gen = DataLoader(dataset=test_data, 
+                                   batch_size=self.params['batch_size'],
+                                   collate_fn=utils.ped_collate_fn,
+                                   shuffle=False)
+        self.eval_data = test_data.eval_data
 
-        test_data = utils.ImageData(features=X, df=df)
-
-        self.test_gen = DataLoader(dataset=test_data,
-                               batch_size=self.params['batch_size'],
-                               shuffle=False)
-        
         return self.test_gen

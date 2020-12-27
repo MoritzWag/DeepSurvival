@@ -15,8 +15,8 @@ model_hyperparams:
   
 exp_params:
     dataset: 'mnist'
-    data_path: 'data/coxph2/'
-    base_folder: 'mnist2'
+    data_path: 'data/coxph/'
+    base_folder: 'simulation'
     data_type: 'coxph'
     batch_size: 64
     learning_rate: 0.005
