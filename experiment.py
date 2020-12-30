@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from src.data import utils
-from src.data import simulations_data
 from src.data.sim_ped import SimPED
 from src.data.sim_coxph import SimCoxPH
 from src.postprocessing import plot_train_progress

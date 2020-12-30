@@ -32,6 +32,7 @@ class SimPED(SimulationData2d):
 
         if download: 
             self.download()
+        pdb.set_trace()
         self.x, self.df = self.load_dataset(path=self.final_path, part=self.part)
         self.features_list = [col for col in self.df if col.startswith('x')]
         self.splines_list = [col for col in self.df if col.startswith('splines')]
@@ -156,5 +157,6 @@ class SimPED(SimulationData2d):
         return {'y': y, 'event': statuses, 'time': times, 'times_unique': times_unique}
 
 
-            
+    def true_hazard(self):
+        pass
 
