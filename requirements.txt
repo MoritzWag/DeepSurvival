@@ -1,0 +1,13 @@
+matplotlib==3.3.2
+pandas==1.1.3
+pytorch_lightning==0.7.3
+tqdm==4.51.0
+lpdn==0.0.1
+numpy==1.19.3
+opencv_python==4.4.0.46
+torchvision==0.8.1
+scikit_survival==0.14.0
+torch==1.7.0
+pygam==0.8.0
+PyYAML==5.3.1
+scikit_learn==0.24.0
