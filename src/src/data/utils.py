@@ -35,10 +35,9 @@ def get_eval_data(batch, model):
     return {'riskscores': prediction}
 
 
-
-
 def ped_collate_fn(batch, data_collate=default_collate):
     # images
+    #pdb.set_trace()
     batch = list(zip(*batch))
     data = []
     images = data_collate(batch[0])
@@ -56,25 +55,27 @@ def ped_collate_fn(batch, data_collate=default_collate):
     splines = np.vstack(batch[5])
     data.append(torch.from_numpy(splines))
 
-    return data
+    return {'images': data[0].float(), 'tabular_data': data[1],
+            'offset': data[2], 'ped_status': data[3], 
+            'index': data[4], 'splines': data[5]}
 
 
+def cox_collate_fn(batch, time_index=-1, data_collate=default_collate):
+    """Create risk set from batch
+    """
+    transposed_data = list(zip(*batch))
+    y_time = np.arrax(transposed_data[time_index])
+    
+    data = []
+    for b in transposed_data:
+        bt = data_collate(b)
+        data.append(bt)
+    
+    data.append(torch.from_numpy(make_riskset(y_time)))
 
-# def cox_collate_fn(
-#     batch: List[Any], time_index: Optional[int] = -1, data_collate=default_collate
-# ) -> List[torch.Tensor]:
-#     """Create risk set from batch."""
-#     transposed_data = list(zip(*batch))
-#     y_time = np.array(transposed_data[time_index])
-# ​
-#     data = []
-#     for b in transposed_data:
-#         bt = data_collate(b)
-#         data.append(bt)
-# ​
-#     data.append(torch.from_numpy(make_riskset(y_time)))
-# ​
-#     return data
+    return {'images': data[0].float(), 'tabular_data': data[1], 
+            'event': data[2], 'time': data[3], 'riskset': data[4]}
+    
 
 
 def make_riskset(time):

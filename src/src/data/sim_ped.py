@@ -32,7 +32,6 @@ class SimPED(SimulationData2d):
 
         if download: 
             self.download()
-        pdb.set_trace()
         self.x, self.df = self.load_dataset(path=self.final_path, part=self.part)
         self.features_list = [col for col in self.df if col.startswith('x')]
         self.splines_list = [col for col in self.df if col.startswith('splines')]
@@ -52,6 +51,10 @@ class SimPED(SimulationData2d):
         ped_status = df['ped_status'].to_numpy()
         index = df['index'].to_numpy()
         splines = df[self.splines_list].to_numpy()
+        
+        # return {'images': images, 'tabular_data': tabular_data,
+        #         'offset': offset, 'ped_status': ped_status, 
+        #         'index': index, 'splines': splines}
 
         return images, tabular_data, offset, ped_status, index, splines
 

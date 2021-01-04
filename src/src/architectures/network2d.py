@@ -1,5 +1,6 @@
 import torch 
 import numpy as np 
+import pdb
 import torch.nn.functional as F
 from torch import nn 
 
@@ -7,7 +8,7 @@ from torch import nn
 class Generator2d(nn.Module):
     """
     """
-    def __init__(self, conv_dim, c_dim=2, repeat_num=6)):
+    def __init__(self, conv_dim, c_dim=2, repeat_num=6):
         super(Generator2d, self).__init__()
 
         layers = []
@@ -17,7 +18,7 @@ class Generator2d(nn.Module):
 
         # down-sampling layers
         curr_dim = conv_dim
-        for i in range(2):
+        for i in range(1):
             layers.append(nn.Conv2d(curr_dim, curr_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
             layers.append(nn.InstanceNorm2d(curr_dim*2, affine=True, track_running_stats=True))
             layers.append(nn.ReLU(inplace=True))
@@ -28,13 +29,13 @@ class Generator2d(nn.Module):
             layers.append(ResidualBlock(dim_in=curr_dim, dim_out=curr_dim))
 
         # up-sampling layers
-        for i in range(2):
+        for i in range(1):
             layers.append(nn.ConvTranspose2d(curr_dim, curr_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
             layers.append(nn.InstanceNorm2d(curr_dim//2, affine=True, track_running_stats=True))
             layers.append(nn.ReLU(inplace=True))
             curr_dim = curr_dim // 2
 
-        layers.append(nn.Conv2d(curr_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
+        layers.append(nn.Conv2d(curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False))
         layers.append(nn.Tanh())
         self.main = nn.Sequential(*layers)
 
@@ -51,7 +52,7 @@ class Generator2d(nn.Module):
 class Discriminator2d(nn.Module):
     """
     """
-    def __init__(self, img_size=28, conv_dim=64, c_dim:2, repeat_num=6):
+    def __init__(self, img_size=28, conv_dim=64, c_dim=2, repeat_num=6):
         super(Discriminator2d, self).__init__()
 
         layers = []
@@ -67,10 +68,13 @@ class Discriminator2d(nn.Module):
         kernel_size = int(img_size //  np.power(2, repeat_num))
         self.main = nn.Sequential(*layers)
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
+        self.linear = nn.Linear(in_features=9, out_features=1)
 
     def forward(self, x):
         h = self.main(x)
         out_src = self.conv1(h)
+        out_src = torch.flatten(out_src, start_dim=1)
+        out_src = self.linear(out_src)
 
         return out_src
 

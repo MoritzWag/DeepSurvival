@@ -27,6 +27,10 @@ class BaseModel(ABC, Evaluator, Visualizer):
     @abstractmethod
     def _accumulate_batches(self):
         pass
+    
+    @abstractmethod
+    def predict_on_images(self):
+        pass
 
     def _orthogonalize(self, structured, unstructured):
         """orthogonalize unstructured latent representation of unstructured data

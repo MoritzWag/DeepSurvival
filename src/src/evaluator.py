@@ -21,7 +21,7 @@ class Evaluator(nn.Module):
         concordance_index = self.concordance_index(event.astype(np.bool), time, riskscores)
         ibs = self.integrated_brier_score(y, surv_preds, times_unique)
 
-        self.scores['cindex'] = concordance_index
+        self.scores['cindex'] = concordance_index[0]
         self.scores['ibs'] = ibs
 
     def concordance_index(self, event, time, riskscores, **kwargs):

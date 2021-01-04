@@ -3,6 +3,7 @@ import torch
 import pdb
 
 from torch import nn
+from torch import functional as F
 from src.models.base import BaseModel
 
 
@@ -88,12 +89,12 @@ class DeepPAM(BaseModel):
         indeces = []
         splines = []
         for batch, data in enumerate(data):
-            image = data[0]
-            tabular_date = data[1]
-            offset = data[2]
-            ped_status = data[3]
-            index = data[4]
-            spline = data[5]
+            image = data['images']
+            tabular_date = data['tabular_data']
+            offset = data['offset']
+            ped_status = data['ped_status']
+            index = data['index']
+            spline = data['splines']
 
             if cuda: 
                 image = image.cuda()
@@ -116,3 +117,15 @@ class DeepPAM(BaseModel):
                         'ped_status': ped_statuses, 'index': indeces, 'splines': splines}
 
         return dict_batches
+
+
+    def predict_on_images(self, images):
+        """
+        """
+        unstructured = self.deep(images)
+        weights = self.linear.weight.data 
+        unstructured_weights = weights[:, 0:unstructured.shape[1]]
+        out = unstructured.matmul(unstructured_weights.t())
+        out = torch.exp(out)
+
+        return out

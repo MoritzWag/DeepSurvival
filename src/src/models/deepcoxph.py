@@ -6,7 +6,6 @@ from torch import nn
 from src.models.base import BaseModel
 
 
-
 class DeepCoxPH(BaseModel):
     """
     """
@@ -76,10 +75,10 @@ class DeepCoxPH(BaseModel):
         events = []
         times = []
         for batch, data in enumerate(data):
-            image = data[0]
-            tabular_date = data[1]
-            event = data[2]
-            time = data[3]
+            image = data['images']
+            tabular_date = data['tabular_data']
+            event = data['event']
+            time = data['time']
             if cuda: 
                 image = image.cuda()
                 tabular_date = tabular_date.cuda()
@@ -98,3 +97,12 @@ class DeepCoxPH(BaseModel):
 
         return dict_batches
 
+    def predict_on_images(self, images):
+        """
+        """
+        unstructured = self.deep(images)
+        weights = self.linear.weight.data
+        unstructured_weights = weights[:, 0:unstructured.shape[1]]
+        out = unstructured.matmul(unstructured_weights.t())
+        
+        return out

@@ -17,6 +17,9 @@ from src.postprocessing import plot_train_progress
 from src.dsap.dsap import DSAP
 from src.dsap.coalition_policies.playergenerators import *
 from src.integrated_gradients import IntegratedGradients
+from src.baselines.baseline_generator import BaselineGenerator
+
+from src.architectures.network2d import Discriminator2d, Generator2d
 
 
 
@@ -28,6 +31,7 @@ class DeepSurvExperiment(pl.LightningModule):
                  params,
                  log_params,
                  model_hyperparams,
+                 baseline_params,
                  run_name,
                  experiment_name):
         super(DeepSurvExperiment, self).__init__()
@@ -37,29 +41,35 @@ class DeepSurvExperiment(pl.LightningModule):
         self.params = params 
         self.log_params = log_params
         self.model_hyperparams = model_hyperparams
+        self.baseline_params = baseline_params
         self.train_history = pd.DataFrame()
         self.val_history = pd.DataFrame()
         self.test_history = pd.DataFrame()
         self.run_name = run_name 
         self.experiment_name = experiment_name
     
-    
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
 
     def training_step(self, batch, batch_idx):
 
+        y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
-            image, tabular_data, event, time = batch
-            riskset = utils.make_riskset(time)
-
-            y_pred = self.forward(tabular_data, image.float())
-            train_loss = self.model._loss_function(event, riskset, predictions=y_pred)
-
+            train_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
         else:
-            image, tabular_data, offset, ped_status, index, splines = batch
-            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-            train_loss = self.model._loss_function(y_pred, ped_status)
+            train_loss = self.model._loss_function(y_pred, batch['ped_status'])
+
+        # if self.params['data_type'] == 'coxph':
+        #     image, tabular_data, event, time = batch
+        #     riskset = utils.make_riskset(time)
+
+        #     y_pred = self.forward(tabular_data, image.float())
+        #     train_loss = self.model._loss_function(event, riskset, predictions=y_pred)
+
+        # else:
+        #     image, tabular_data, offset, ped_status, index, splines = batch
+        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+        #     train_loss = self.model._loss_function(y_pred, ped_status)
         
         train_loss = {'loss': train_loss}
 
@@ -69,18 +79,25 @@ class DeepSurvExperiment(pl.LightningModule):
         return train_loss
 
     def validation_step(self, batch, batch_idx):
-        
-        if self.params['data_type'] == 'coxph':
-            image, tabular_data, event, time = batch
-            riskset = utils.make_riskset(time)
-            
-            y_pred = self.forward(tabular_data, image.float())
-            val_loss = self.model._loss_function(event, riskset, predictions=y_pred)
 
+        y_pred = self.forward(**batch)
+        if self.params['data_type'] == 'coxph':
+            val_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
         else:
-            image, tabular_data, offset, ped_status, index, splines = batch
-            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-            val_loss = self.model._loss_function(y_pred, ped_status)
+            val_loss = self.model._loss_function(y_pred, batch['ped_status'])
+        
+        # if self.params['data_type'] == 'coxph':
+        #     image, tabular_data, event, time = batch
+        #     riskset = utils.make_riskset(time)
+            
+        #     y_pred = self.forward(tabular_data, image.float())
+        #     val_loss = self.model._loss_function(event, riskset, predictions=y_pred)
+
+        # else:
+        #     pdb.set_trace()
+        #     image, tabular_data, offset, ped_status, index, splines = batch
+        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+        #     val_loss = self.model._loss_function(y_pred, ped_status)
         
         val_loss = {'loss': val_loss}
 
@@ -98,17 +115,23 @@ class DeepSurvExperiment(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
 
+        y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
-            image, tabular_data, event, time = batch
-            riskset = utils.make_riskset(time)
-
-            y_pred = self.forward(tabular_data, image.float())
-            test_loss = self.model._loss_function(event, riskset, predictions=y_pred)
-
+            test_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
         else:
-            image, tabular_data, offset, ped_status, index, splines = batch
-            y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-            test_loss = self.model._loss_function(y_pred, ped_status)
+            test_loss = self.model._loss_function(y_pred, batch['ped_status'])
+
+        # if self.params['data_type'] == 'coxph':
+        #     image, tabular_data, event, time = batch
+        #     riskset = utils.make_riskset(time)
+
+        #     y_pred = self.forward(tabular_data, image.float())
+        #     test_loss = self.model._loss_function(event, riskset, predictions=y_pred)
+
+        # else:
+        #     image, tabular_data, offset, ped_status, index, splines = batch
+        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
+        #     test_loss = self.model._loss_function(y_pred, ped_status)
         
         test_loss = {'loss': test_loss}
         
@@ -141,13 +164,30 @@ class DeepSurvExperiment(pl.LightningModule):
        
         # get survival cindex and ibs
         self.model.get_metrics(**evaluation_data)
-
+        
         # log metrics
         for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
             self.logger.experiment.log_metric(key=key,
                                               value=value,
                                               run_id=self.logger.run_id)
+
+
+        # train baseline generator 
+        baseline_generator = BaselineGenerator(discriminator=Discriminator2d,
+                                               generator=Generator2d,
+                                               survival_model=self.model,
+                                               data_type=self.params['data_type'],
+                                               c_dim=self.baseline_params['c_dim'],
+                                               img_size=self.baseline_params['img_size'],
+                                               generator_params=self.baseline_params['generator_params'],
+                                               discriminator_params=self.baseline_params['discriminator_params'],
+                                               trainer_params=self.baseline_params['trainer_params'])
+
+        # train baseline generator
+        baseline_generator.train(train_gen=self.train_gen)
         
+        # validate baseline generator
+        baseline_generator.validate(val_gen=self.val_gen)
         
 
         ##################################################################################################
@@ -225,20 +265,21 @@ class DeepSurvExperiment(pl.LightningModule):
                                   part='train',
                                   base_folder=self.params['base_folder'],
                                   data_type=self.params['data_type'])
-            train_gen = DataLoader(dataset=train_data,
+            self.train_gen = DataLoader(dataset=train_data,
                                    batch_size=self.params['batch_size'],
+                                   collate_fn=utils.cox_collate_fn,
                                    shuffle=False)
         else:
             train_data = SimPED(root='./data',
                                 part='train',
                                 base_folder=self.params['base_folder'],
                                 data_type=self.params['data_type'])
-            train_gen = DataLoader(dataset=train_data, 
+            self.train_gen = DataLoader(dataset=train_data, 
                                    batch_size=self.params['batch_size'],
                                    collate_fn=utils.ped_collate_fn,
                                    shuffle=False)
 
-        return train_gen
+        return self.train_gen
 
     def val_dataloader(self):
         """
@@ -250,6 +291,7 @@ class DeepSurvExperiment(pl.LightningModule):
                                   data_type=self.params['data_type'])
             self.val_gen = DataLoader(dataset=val_data,
                                    batch_size=self.params['batch_size'],
+                                   collate_fn=utils.cox_collate_fn,
                                    shuffle=False)
         else:
             val_data = SimPED(root='./data',
@@ -273,6 +315,7 @@ class DeepSurvExperiment(pl.LightningModule):
                                   data_type=self.params['data_type'])
             self.test_gen = DataLoader(dataset=test_data,
                                    batch_size=self.params['batch_size'],
+                                   collate_fn=utils.cox_collate_fn,
                                    shuffle=False)
 
         else:

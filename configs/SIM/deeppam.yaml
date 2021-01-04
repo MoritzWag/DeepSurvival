@@ -23,6 +23,31 @@ exp_params:
     weight_decay: 0.0
     scheduler_gamma: 0.95
 
+baseline_params:
+    baseline: 'stargan'
+    c_dim: 2
+    img_size: 28
+    tolerance: 0.5
+    discriminator_params:
+        learning_rate: 0.0001
+        beta1: 0.001
+        beta2: 0.001
+        repeat_num: 3
+        conv_dim: 64
+    generator_params:
+        learning_rate: 0.00001
+        beta1: 0.001
+        beta2: 0.001
+        repeat_num: 6
+        conv_dim: 64
+    trainer_params:
+        n_steps: 10000
+        dataset: 'idk'
+        n_critic: 10
+        log_step: 10
+        lambda_cls: 10.0
+        lambda_rec: 10.0
+
 trainer_params:
     gpu: 0
     max_epochs: 1

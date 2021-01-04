@@ -47,6 +47,7 @@ experiment = DeepSurvExperiment(model,
                                 params=config['exp_params'],
                                 log_params=config['logging_params'],
                                 model_hyperparams=config['model_hyperparams'],
+                                baseline_params=config['baseline_params'],
                                 run_name=args.run_name,
                                 experiment_name=args.experiment_name)
 
