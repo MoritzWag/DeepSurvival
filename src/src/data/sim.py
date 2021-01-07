@@ -18,7 +18,6 @@ from src.data.utils import rectangle_mask, triangle_mask, circle_mask
 class SimulationData2d(data.Dataset):
     """
     """
-
     seed = 1328
     num_obs = 10000
     val_size = 0.2 * num_obs
@@ -37,9 +36,6 @@ class SimulationData2d(data.Dataset):
         self.base_folder = base_folder
         self.data_type = data_type
         self.final_path = os.path.join(self.root, self.base_folder)
-
-    def size(self):
-        pass
 
     def __len__(self):
         raise NotImplementedError
@@ -80,6 +76,10 @@ class SimulationData2d(data.Dataset):
 
         return X_train, riskgroup_train, X_test, riskgroup_test
 
+    def download_mnist3d(self):
+        """3d point clouds generated from MNIST dataset
+        """
+        pass
 
     def simulate_images(self,
                         img_size,
@@ -97,10 +97,10 @@ class SimulationData2d(data.Dataset):
         # assign grayscale to each group: [0, 1]
         # this will solely determine the riskscore
         grayscales = random.uniform(0, 1, n_groups)
+        grayscales = np.sort(grayscales)
         grayscales_assignment = []
         for i in groups:
             grayscales_assignment.append(grayscales[i])
-        
         
         images_final = []
         for i in range(num_obs):
@@ -139,7 +139,6 @@ class SimulationData2d(data.Dataset):
         
 
         return X_train, riskgroup_train, X_test, riskgroup_test
-
 
     def load_dataset(self, path, part):
         """

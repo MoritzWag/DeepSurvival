@@ -15,7 +15,7 @@ model_hyperparams:
   
 exp_params:
     dataset: 'mnist'
-    data_path: 'data/coxph/'
+    data_path: 'data/ped/'
     base_folder: 'simulation'
     data_type: 'ped'
     batch_size: 64
@@ -30,26 +30,28 @@ baseline_params:
     tolerance: 0.5
     discriminator_params:
         learning_rate: 0.0001
-        beta1: 0.001
-        beta2: 0.001
+        beta1: 0.5
+        beta2: 0.999
         repeat_num: 3
         conv_dim: 64
     generator_params:
-        learning_rate: 0.00001
-        beta1: 0.001
-        beta2: 0.001
+        learning_rate: 0.0001
+        beta1: 0.5
+        beta2: 0.999
         repeat_num: 6
         conv_dim: 64
     trainer_params:
-        n_steps: 10000
+        n_steps: 100
         dataset: 'idk'
-        n_critic: 10
-        log_step: 10
-        lambda_cls: 10.0
-        lambda_rec: 10.0
+        n_critic: 5
+        log_step: 100
+        sample_step: 100
+        lambda_cls: 1.0
+        lambda_rec: .5
+        lambda_gp: 10.0
 
 trainer_params:
-    gpu: 0
+    gpu: -1
     max_epochs: 1
   
 logging_params:

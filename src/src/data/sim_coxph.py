@@ -38,15 +38,17 @@ class SimCoxPH(SimulationData2d):
         self.features_list = [col for col in self.df if col.startswith('x')]
         if self.part == 'test':
             self.eval_data = self.prepare_for_eval()
+        
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def __len__(self):
         return self.x.shape[0]
 
     def __getitem__(self, index):
-        images = self.x[index, :, :, ]
-        tabular_data = self.df[self.features_list].to_numpy()[index, :]
-        event = self.df['event'].to_numpy()[index]
-        time = self.df['time'].to_numpy()[index]
+        images = torch.tensor(self.x[index, :, :, ]).to(self.device)
+        tabular_data = torch.tensor(self.df[self.features_list].to_numpy()[index, :]).to(self.device)
+        event = torch.tensor(self.df['event'].to_numpy()[index]).to(self.device)
+        time = torch.tensor(self.df['time'].to_numpy()[index]).to(self.device)
 
         return images, tabular_data, event, time
     
@@ -114,10 +116,10 @@ class SimCoxPH(SimulationData2d):
         df = pd.DataFrame(data={'riskgroup': riskgroups, 'x1': x1, 'x2': x2})
 
         df['risk_scores'] = -0.5 + 0.25*df['x1'] - 0.3*df['x2'] \
-                                    + 0.5*(df['riskgroup'] == 0) \
-                                    - 1*(df['riskgroup'] == 1) \
-                                    + 0.3*(df['riskgroup'] == 2) \
-                                    - 0.8*(df['riskgroup'] == 3)
+                                    + 2.0*(df['riskgroup'] == 0) \
+                                    + 1*(df['riskgroup'] == 1) \
+                                    - 0.3*(df['riskgroup'] == 2) \
+                                    - 1.8*(df['riskgroup'] == 3)
         
         return df
 

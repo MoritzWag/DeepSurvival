@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 import src
 import pdb
 
-
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
@@ -36,7 +35,9 @@ class DeepSurvExperiment(pl.LightningModule):
                  experiment_name):
         super(DeepSurvExperiment, self).__init__()
 
-        self.model = model.float()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.model = model.float().to(self.device)
         self.model.epoch = self.current_epoch
         self.params = params 
         self.log_params = log_params
@@ -156,6 +157,7 @@ class DeepSurvExperiment(pl.LightningModule):
             pass
 
         accumulated_batch = self.model._accumulate_batches(data=self.test_gen)
+        sample_batch = self.model._sample_batch(self.test_gen, num_obs=4)
         eval_data = utils.get_eval_data(batch=accumulated_batch,
                                         model=self.model)
         
@@ -172,7 +174,7 @@ class DeepSurvExperiment(pl.LightningModule):
                                               run_id=self.logger.run_id)
 
 
-        # train baseline generator 
+        # # train baseline generator 
         baseline_generator = BaselineGenerator(discriminator=Discriminator2d,
                                                generator=Generator2d,
                                                survival_model=self.model,
@@ -187,52 +189,74 @@ class DeepSurvExperiment(pl.LightningModule):
         baseline_generator.train(train_gen=self.train_gen)
         
         # validate baseline generator
-        baseline_generator.validate(val_gen=self.val_gen)
+        #baseline_generator.validate(val_gen=self.val_gen)
         
+        #baseline_images = baseline_generator.test(batch=accumulated_batch)
+        baseline_images = baseline_generator.test(batch=sample_batch)
 
         ##################################################################################################
         ## derive feature attributions
-        images, tabular_data = images[:4, :, :, ], tabular_data[:4, :]
+
+        #images, tabular_data = images[:4, :, :, ], tabular_data[:4, :]
+        # I think, we should determine how many images to be calculated in the attribution method itself!
+
+        #images, tabular_data = accumulated_batch['images'][:4, :, :, ], accumulated_batch['tabular_data'][:4, :]
         
-        IG = IntegratedGradients()
-        integrated_gradients = IG.integrated_gradients(model=self.model,
-                                                       images=images,
-                                                       tabular_data=tabular_data,
-                                                       length=9,
-                                                       baseline=images[1, :, :, :],
-                                                       storage_path="euclidean_morph",
-                                                       run_name=self.run_name)
-        wasserstein_ig = IG.wasserstein_integrated_gradients(model=self.model,
-                                                             images=images,
-                                                             img2=images[1, :, :, :],
-                                                             length=9, 
-                                                             tabular_data=tabular_data,
-                                                             storage_path="wasserstein_morph",
-                                                             run_name=self.run_name)
+        images, tabular_data = sample_batch['images'], sample_batch['tabular_data']
 
-        self.model.visualize_attributions(images=images, 
-                                          attributions=integrated_gradients,
-                                          method='integrated_gradient',
-                                          storage_path="attributions",
-                                          run_name=self.run_name)
+        # 1.) Calculate Integrated Gradients
+        # IG = IntegratedGradients()
+        # integrated_gradients = IG.integrated_gradients(model=self.model,
+        #                                                images=images,
+        #                                                tabular_data=tabular_data,
+        #                                                length=9,
+        #                                                baseline=baseline_images,
+        #                                                storage_path="euclidean_morph",
+        #                                                run_name=self.run_name)
+        # wasserstein_ig = IG.wasserstein_integrated_gradients(model=self.model,
+        #                                                      images=images,
+        #                                                      baseline=baseline_images,
+        #                                                      length=9, 
+        #                                                      tabular_data=tabular_data,
+        #                                                      storage_path="wasserstein_morph",
+        #                                                      run_name=self.run_name)
 
-        self.model.visualize_attributions(images=images,
-                                          attributions=wasserstein_ig,
-                                          method='wasserstein_ig',
-                                          storage_path='attributions',
-                                          run_name=self.run_name)
+        # pdb.set_trace()
+        # self.model.visualize_attributions(images=images, 
+        #                                   attributions=integrated_gradients,
+        #                                   method='integrated_gradient',
+        #                                   storage_path="attributions",
+        #                                   run_name=self.run_name)
 
+        # self.model.visualize_attributions(images=images,
+        #                                   attributions=wasserstein_ig,
+        #                                   method='wasserstein_ig',
+        #                                   storage_path='attributions',
+        #                                   run_name=self.run_name)
+
+        # 2.) Calculate approximate Shapley Values
         lpdn_model = self.model._build_lpdn_model()
 
         dsap = DSAP(player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data)),
                     input_shape=images[0].shape,
                     lpdn_model=lpdn_model)
-        shapley_attributions = dsap.run(images=images, tabular_data=tabular_data, steps=50)
+        shapley_attributions = dsap.run(images=images, 
+                                        tabular_data=tabular_data,
+                                        baselines=baseline_images, 
+                                        steps=50)
         self.model.visualize_attributions(images=images, 
                                           attributions=shapley_attributions,
                                           method='shapley',
                                           storage_path='attributions',
                                           run_name=self.run_name)
+
+        # # 3.) Calculate Occlusion
+        # occ = Occlusion(player_generator,
+        #                 input_shape,
+        #                 baseline,
+        #                 )
+        # occlusion_attributions = 
+
 
         return {'avg_loss': avg_loss}
 

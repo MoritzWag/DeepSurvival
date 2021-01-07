@@ -1,6 +1,7 @@
 
 import torch 
 import pdb
+import numpy as np 
 
 from torch import nn
 from src.models.base import BaseModel
@@ -67,7 +68,7 @@ class DeepCoxPH(BaseModel):
             output = torch.squeeze(output, axis=axis)
         return output
 
-    def _accumulate_batches(self, data, cuda=False):
+    def _accumulate_batches(self, data):
         """
         """
         images = []
@@ -75,13 +76,13 @@ class DeepCoxPH(BaseModel):
         events = []
         times = []
         for batch, data in enumerate(data):
-            image = data['images']
-            tabular_date = data['tabular_data']
+            image = data['images'].to(self.device)
+            tabular_date = data['tabular_data'].to(self.device)
             event = data['event']
             time = data['time']
-            if cuda: 
-                image = image.cuda()
-                tabular_date = tabular_date.cuda()
+            # if cuda: 
+            #     image = image.c
+            #     tabular_date = tabular_date.cuda()
             images.append(image)
             tabular_data.append(tabular_date)
             events.append(event)
@@ -96,13 +97,26 @@ class DeepCoxPH(BaseModel):
                         'events': events, 'times': times}
 
         return dict_batches
+    
+    def _sample_batch(self, data, num_obs):
+        """
+        """
+        acc_batch = self._accumulate_batches(data=data)
+        pdb.set_trace()
+        indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
+        
+        for value, key in zip(acc_batch.values(), acc_batch.keys()):
+            acc_batch[key] = value[indeces]
+        
+        return acc_batch
 
-    def predict_on_images(self, images):
+    def predict_on_images(self, images, tabular_data):
         """
         """
         unstructured = self.deep(images)
+        unstructured_orth = self._orthogonalize(tabular_data, unstructured)
         weights = self.linear.weight.data
-        unstructured_weights = weights[:, 0:unstructured.shape[1]]
-        out = unstructured.matmul(unstructured_weights.t())
+        unstructured_weights = weights[:, 0:unstructured_orth.shape[1]]
+        out = unstructured_orth.matmul(unstructured_weights.t())
         
         return out

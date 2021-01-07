@@ -18,10 +18,10 @@ def get_eval_data(batch, model):
         zero_splines = torch.zeros(batch['splines'].shape)
         batch['splines'] = zero_splines
 
-        predictions = model(**batch).detach().numpy()
+        predictions = model(**batch).cpu().detach().numpy()
 
         prediction = []
-        num_of_intervals = np.unique(batch['index'], return_counts=True)[1]
+        num_of_intervals = np.unique(batch['index'].cpu().detach().numpy(), return_counts=True)[1]
         for idx in range(num_of_intervals.shape[0]):
             num_obs = np.sum(num_of_intervals[0:idx+1])
             predictions_obs = predictions[num_obs -1]
@@ -29,10 +29,35 @@ def get_eval_data(batch, model):
         
         prediction = np.stack(prediction)
     else:
-        prediction = model(**batch).detach().numpy()
+        prediction = model(**batch).cpu().detach().numpy()
 
 
     return {'riskscores': prediction}
+
+
+# def ped_collate_fn(batch, data_collate=default_collate):
+#     # images
+#     #pdb.set_trace()
+#     batch = list(zip(*batch))
+#     data = []
+#     images = data_collate(batch[0])
+#     data.append(images)
+
+#     # tabular data
+#     td = np.vstack(batch[1])
+#     data.append(torch.from_numpy(td))
+#     offset = np.hstack(batch[2])
+#     data.append(torch.from_numpy(offset))
+#     ped_status = np.hstack(batch[3])
+#     data.append(torch.from_numpy(ped_status))
+#     index = np.hstack(batch[4])
+#     data.append(torch.from_numpy(index))
+#     splines = np.vstack(batch[5])
+#     data.append(torch.from_numpy(splines))
+
+#     return {'images': data[0].float(), 'tabular_data': data[1],
+#             'offset': data[2], 'ped_status': data[3], 
+#             'index': data[4], 'splines': data[5]}
 
 
 def ped_collate_fn(batch, data_collate=default_collate):
@@ -44,16 +69,16 @@ def ped_collate_fn(batch, data_collate=default_collate):
     data.append(images)
 
     # tabular data
-    td = np.vstack(batch[1])
-    data.append(torch.from_numpy(td))
-    offset = np.hstack(batch[2])
-    data.append(torch.from_numpy(offset))
-    ped_status = np.hstack(batch[3])
-    data.append(torch.from_numpy(ped_status))
-    index = np.hstack(batch[4])
-    data.append(torch.from_numpy(index))
-    splines = np.vstack(batch[5])
-    data.append(torch.from_numpy(splines))
+    td = torch.vstack(batch[1])
+    data.append(td)
+    offset = torch.hstack(batch[2])
+    data.append(offset)
+    ped_status = torch.hstack(batch[3])
+    data.append(ped_status)
+    index = torch.hstack(batch[4])
+    data.append(index)
+    splines = torch.vstack(batch[5])
+    data.append(splines)
 
     return {'images': data[0].float(), 'tabular_data': data[1],
             'offset': data[2], 'ped_status': data[3], 
@@ -64,7 +89,7 @@ def cox_collate_fn(batch, time_index=-1, data_collate=default_collate):
     """Create risk set from batch
     """
     transposed_data = list(zip(*batch))
-    y_time = np.arrax(transposed_data[time_index])
+    y_time = np.array(transposed_data[time_index])
     
     data = []
     for b in transposed_data:

@@ -1,6 +1,7 @@
 
 import torch 
 import pdb
+import numpy as np
 
 from torch import nn
 from torch import functional as F
@@ -26,12 +27,13 @@ class DeepPAM(BaseModel):
         self.linear = nn.Linear(in_features=self.overall_dim, out_features=self.output_dim)
 
     def forward(self, tabular_data, images, offset, index, splines, **kwargs):
+
         # 1.) pass unstructured part through deep network
         unstructured = self.deep(images)
 
         # 2.) bring latent representation into ped format
         # 3.) additionally, orthogonalize for each interval seperately
-        unstructured_ped = self.latent_to_ped(unstructured, tabular_data, index)
+        unstructured_ped = self.latent_to_ped(unstructured, tabular_data.to(self.device), index.to(self.device))
 
         # 4.) concatenate unstructured_ped with structured 
         features_concatenated = torch.cat((tabular_data, unstructured_ped), axis=1)
@@ -42,7 +44,7 @@ class DeepPAM(BaseModel):
 
         # 6.) add offset and splines
         splines = torch.sum(splines, dim=1)
-        out = out + offset + splines
+        out = out + offset.to(self.device) + splines.to(self.device)
         hazard = torch.exp(out)
 
         return hazard
@@ -117,15 +119,41 @@ class DeepPAM(BaseModel):
                         'ped_status': ped_statuses, 'index': indeces, 'splines': splines}
 
         return dict_batches
+    
+    def _sample_batch(self, data, num_obs):
+        """
+        """
+        acc_batch = self._accumulate_batches(data=data)
+        samples = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, )).numpy()
+        index = acc_batch['index'].cpu().detach().numpy()
+        indeces = []
+        for sample in samples:
+            idx = np.where(index==sample)[0]
+            indeces.append(idx)
+        
+        #pdb.set_trace()
+        indeces = np.hstack(indeces)
+        indeces = torch.from_numpy(indeces).to(self.device)
+        
+        # index images 
+        acc_batch['images'] = acc_batch['images'][samples, :, :, :]
+        for value, key in zip(acc_batch.values(), acc_batch.keys()):
+            if key != 'images':
+                acc_batch[key] = value[indeces]
+            else:
+                continue
+        
+        return acc_batch
 
-
-    def predict_on_images(self, images):
+    def predict_on_images(self, images, tabular_data):
         """
         """
         unstructured = self.deep(images)
+        unstructured_orth = unstructured
+        #unstructured_orth = self._orthogonalize(tabular_data, unstructured)
         weights = self.linear.weight.data 
-        unstructured_weights = weights[:, 0:unstructured.shape[1]]
-        out = unstructured.matmul(unstructured_weights.t())
+        unstructured_weights = weights[:, 0:unstructured_orth.shape[1]]
+        out = unstructured_orth.matmul(unstructured_weights.t())
         out = torch.exp(out)
 
         return out

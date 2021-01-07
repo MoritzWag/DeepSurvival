@@ -69,12 +69,14 @@ class Discriminator2d(nn.Module):
         self.main = nn.Sequential(*layers)
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
         self.linear = nn.Linear(in_features=9, out_features=1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         h = self.main(x)
         out_src = self.conv1(h)
         out_src = torch.flatten(out_src, start_dim=1)
         out_src = self.linear(out_src)
+        out_src = self.sigmoid(out_src)
 
         return out_src
 

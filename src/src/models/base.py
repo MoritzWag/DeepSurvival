@@ -15,6 +15,8 @@ class BaseModel(ABC, Evaluator, Visualizer):
     """
     def __init__(self, **kwargs):
         super(BaseModel, self).__init__(**kwargs)
+    
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     @abstractmethod
     def _loss_function(self):
@@ -51,21 +53,22 @@ class BaseModel(ABC, Evaluator, Visualizer):
         Returns:
             projection_matrix: {torch.Tensor} projection matrix
         """
+        try:
+            Q, R = torch.qr(matrix)
+            xTx_xT = torch.matmul(torch.inverse(R), Q.t())
+            projection_matrix = torch.matmul(matrix, xTx_xT)
+        except:
+            pdb.set_trace()
 
-        Q, R = torch.qr(matrix)
-        xTx_xT = torch.matmul(torch.inverse(R), Q.t())
-        projection_matrix = torch.matmul(matrix, xTx_xT)
-
-        return projection_matrix
+        return projection_matrix.to(self.device)
 
     def orthogonalization(self, projection_matrix, feature_matrix):
         """
         """
         num_obs = projection_matrix.shape[0]
-        identity = torch.eye(num_obs)
+        identity = torch.eye(num_obs).to(self.device)
         orthogonalized_matrix = identity - projection_matrix
-        orthogonalized_features = torch.matmul(orthogonalized_matrix.float(), feature_matrix)
-
+        orthogonalized_features = torch.matmul(orthogonalized_matrix.float(), feature_matrix.to(self.device))
         return orthogonalized_features
 
     def _build_lpdn_model(self):
@@ -144,8 +147,9 @@ class LPModel(nn.Module):
         self.orthogonalize = orthogonalize
         self._orthogonalize = orthogonalize
 
-    def forward(self, structured, unstructured): 
-        unstructured_input = self.unstructured_input_layer(unstructured)
+    def forward(self, structured, unstructured, baselines): 
+        pdb.set_trace()
+        unstructured_input = self.unstructured_input_layer(unstructured, baselines)
         structured_input = self.structured_input_layer(structured)
 
         #  loop through inputs with mask and without mask

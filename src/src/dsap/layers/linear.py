@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import torch.nn
+import pdb
 from torch import Tensor
 from torch.nn import functional as F
 
@@ -20,6 +21,7 @@ class ProbLinearInput(torch.nn.Linear):
             in_features=in_features, out_features=out_features, bias=bias
         )
         self.epsilon = 1e-7
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(
         self, inputs: Tuple[Tensor, Tensor, Tensor]
@@ -30,7 +32,7 @@ class ProbLinearInput(torch.nn.Linear):
             inputs (): Inputs in a tuple of (Input, mask, k)
         Returns: Mean and variance of the input distribution with (mv1) and without (mv2) masked features.
         """
-
+        pdb.set_trace()
         # Note: Takes zero baseline as default, does not use DaspConfig
         input_, mask, k = inputs
         assert len(mask.shape) == len(
@@ -41,7 +43,7 @@ class ProbLinearInput(torch.nn.Linear):
         inputs_i = input_ * mask_comp
 
         dot = F.linear(input_, self.weight)
-        dot_i = F.linear(inputs_i, self.weight)
+        dot_i = F.linear(inputs_i.float(), self.weight)
         dot_mask = torch.sum(mask_comp, dim=1, keepdim=True)
         dot_v = F.linear(square(inputs_i), square(self.weight))
         # Compute mean without feature i

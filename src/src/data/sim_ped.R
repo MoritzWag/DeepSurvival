@@ -38,7 +38,7 @@ f0 <- function(t){
 }
 
 
-form <- ~ -0.5 + f0(t) + 0.25 * x1 - 0.3 * x2 + 0.5 * (item == 1) + -1 * (item == 2) + -3 * (item == 3)
+form <- ~ -0.5 + f0(t) + 0.25 * x1 - 0.3 * x2 + 2 * (item == 0) + 0.5 * (item == 1) + -1 * (item == 2) + -3 * (item == 3)
 cens_times <- rexp(n, 0.02)
 survival_data <- sim_pexp(form, sim_dataset, seq(0, 10, by=.2)) %>%
     mutate(status = ifelse(time > cens_times, 0, status)) %>%

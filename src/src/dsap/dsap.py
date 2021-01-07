@@ -17,14 +17,16 @@ class DSAP():
                  player_generator,
                  input_shape,
                  lpdn_model):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.player_generator = player_generator
         self.input_shape = input_shape
-        self.lpdn_model = lpdn_model
+        self.lpdn_model = lpdn_model.to(self.device).float()
 
-    def run(self, images, tabular_data, steps=None):
+    def run(self, images, tabular_data, baselines, steps=None):
         """
         """
-
+        images = images.cpu()
+        baselines = baselines.cpu()
         player_generator = self.player_generator
         if player_generator is None:
             player_generator = DefaultPlayerIterator(images)
@@ -34,13 +36,14 @@ class DSAP():
 
         result = None
         batch_size = images.size()[0]
+        batch_size_feat = tabular_data.size()[0]
 
         tile_input = [n_steps] + (len(images.shape) - 1) * [1]
         tile_mask = [n_steps * batch_size] + (len(images.shape) - 1) * [1]
 
         # enable heterogeneous input:
         if tabular_data is not None:
-            tile_structured_mask = [n_steps * batch_size] + (len(tabular_data.shape) - 1) * [1]
+            tile_structured_mask = [n_steps * batch_size_feat] + (len(tabular_data.shape) - 1) * [1]
             tile_structured_input = [n_steps] + (len(tabular_data.shape) - 1) * [1]
             ks = [x - 2 for x in ks]
             ks_feat = [2] * len(ks)
@@ -58,7 +61,6 @@ class DSAP():
                 for i, (mask, mask_output) in enumerate(self.player_generator):
                     # Workaround: as Keras requires the first dimension of the inputs to be the same,
                     # we tile and repeat the input, mask and ks vector to have them aligned.
-                    print("Hello World")
                     if tabular_data is not None:
                         mask, feat_mask = mask
                         mask_output, feat_output = mask_output
@@ -67,25 +69,29 @@ class DSAP():
                     mask = torch.as_tensor(mask, device=images.device)
                     feat_mask = torch.as_tensor(feat_mask, device=images.device)
                     
+                    # here, it must be defined how the baseline is determined
                     inputs = (
-                        torch.tensor(np.tile(images, tile_input)),
-                        torch.tensor(np.tile(mask, tile_mask)),
-                        torch.tensor(np.repeat(ks, images.shape[0])[:, np.newaxis]),
+                        torch.tensor(np.tile(images, tile_input)).to(self.device),
+                        torch.tensor(np.tile(mask, tile_mask)).to(self.device),
+                        torch.tensor(np.repeat(ks, images.shape[0])[:, np.newaxis]).to(self.device),
                     )
+                    baseline_images = torch.tensor(np.tile(baselines, tile_input)).to(self.device)
                     
                     if tabular_data is not None:
                         structured_inputs = (
-                            tabular_data.repeat(tile_structured_input).to(images.device),
-                            feat_mask.repeat(tile_structured_mask).to(images.device),
-                            ks_feat.repeat(batch_size)
+                            tabular_data.repeat(tile_structured_input).to(self.device).float(),
+                            feat_mask.repeat(tile_structured_mask).to(self.device).float(),
+                            ks_feat.repeat(batch_size_feat)
                             .unsqueeze(dim=1)
-                            .to(images.device),
+                            .to(self.device).float(),
                         )
 
                         out1, out2 = self.lpdn_model(unstructured=inputs, 
-                                                    structured=structured_inputs)
+                                                     structured=structured_inputs,
+                                                     baselines=baseline_images).to(self.device)
                     else:
-                        out1, out2 = self.lpdn_model(unstructured=inputs)
+                        out1, out2 = self.lpdn_model(unstructured=inputs,
+                                                     baselines=baseline_images).to(self.device)
 
                     y1 = out1[0].cpu().detach().numpy()
                     y2 = out2[0].cpu().detach().numpy()

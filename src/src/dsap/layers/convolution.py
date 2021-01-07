@@ -26,6 +26,7 @@ class ProbConv2dInput(Conv2d):
             kernel_size=kernel_size,
             **kwargs
         )
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def _conv2d(self, inputs, kernel):
         return F.conv2d(inputs,
@@ -36,7 +37,7 @@ class ProbConv2dInput(Conv2d):
                         dilation=self.dilation,
                         groups=self.groups)
 
-    def forward(self, inputs):
+    def forward(self, inputs, baselines):
         """
         """
         input_, mask, k = inputs
@@ -46,11 +47,20 @@ class ProbConv2dInput(Conv2d):
 
         # When I say k, i actually mean k coalition players so need to compensate for it 
         k = torch.unsqueeze(torch.unsqueeze(k, -1), -1)
-        one = torch.as_tensor([1.0], dtype=torch.float)
+        one = torch.as_tensor([1.0], dtype=torch.float).to(self.device)
 
+        # 1.) apply mask complement => mask_comp
+        mask_comp = input_ * (torch.ones_like(mask) - mask)
+
+        # 2.) inputs_i = mask_comp + baseline * mask
+        inputs_i = mask_comp + baselines * mask
+
+        # 3.) Calculate ghost
         ghost = torch.ones_like(input_) * (1.0 - mask)
-        inputs_i = input_ * (1.0 - mask)
 
+        # # Old implementation
+        # ghost = torch.ones_like(input_) * (1.0 - mask)
+        # inputs_i = input_ * (1.0 - mask)
         conv = self._conv2d(input_, self.weight)
         conv_i = self._conv2d(inputs_i, self.weight)
         conv_count = self._conv2d(ghost, torch.ones_like(self.weight))

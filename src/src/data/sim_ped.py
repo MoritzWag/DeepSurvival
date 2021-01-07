@@ -38,19 +38,20 @@ class SimPED(SimulationData2d):
         if self.part == 'test':
             self.eval_data = self.prepare_for_eval()
 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def __len__(self):
         return self.x.shape[0]
 
     def __getitem__(self, index):
         df = self.df[self.df['index'] == index]
-        images = self.x[index, :, :, ]
-        tabular_data = df[self.features_list].to_numpy()
+        images = torch.tensor(self.x[index, :, :, ]).to(self.device)
+        tabular_data = torch.tensor(df[self.features_list].to_numpy()).to(self.device)
 
-        offset = df['offset'].to_numpy()
-        ped_status = df['ped_status'].to_numpy()
-        index = df['index'].to_numpy()
-        splines = df[self.splines_list].to_numpy()
+        offset = torch.tensor(df['offset'].to_numpy()).to(self.device)
+        ped_status = torch.tensor(df['ped_status'].to_numpy()).to(self.device)
+        index = torch.tensor(df['index'].to_numpy()).to(self.device)
+        splines = torch.tensor(df[self.splines_list].to_numpy()).to(self.device)
         
         # return {'images': images, 'tabular_data': tabular_data,
         #         'offset': offset, 'ped_status': ped_status, 
@@ -60,11 +61,11 @@ class SimPED(SimulationData2d):
 
     def download(self):
         if not os.path.exists(self.final_path):
-            os.mkdir(self.final_path)
+            os.makedirs(self.final_path)
 
         storage_path = os.path.join(self.final_path, self.data_type)
         if not os.path.exists(storage_path):
-            os.mkdir(storage_path)
+            os.makedirs(storage_path)
         else:
             return
 

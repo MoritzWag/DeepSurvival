@@ -2,9 +2,12 @@ import torch
 import pdb
 import time 
 import datetime 
+import pandas as pd
 
 from torch import nn
+from torchvision.utils import save_image
 from src.architectures.network2d import Generator2d, Discriminator2d
+from src.postprocessing import plot_train_progress
 
 
 class BaselineGenerator(nn.Module):
@@ -48,11 +51,11 @@ class BaselineGenerator(nn.Module):
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.build_model()
+        self.train_history = pd.DataFrame()
 
     def build_model(self):
         """
         """
-
         # configure discriminator
         self.D = self.discriminator(self.img_size, self.d_conv_dim, self.c_dim, self.d_repeat_num)
 
@@ -69,6 +72,11 @@ class BaselineGenerator(nn.Module):
         # put them on the device
         self.G.to(self.device).float()
         self.D.to(self.device).float()
+        self.survival_model.to(self.device).float()
+    
+    def reset_grad(self):
+        self.g_optimizer.zero_grad()
+        self.d_optimizer.zero_grad()
 
     def train(self, train_gen):
         """
@@ -85,8 +93,16 @@ class BaselineGenerator(nn.Module):
                 train_gen_iter = iter(train_gen)
                 batch = next(train_gen_iter)
 
+            images = batch['images'].to(self.device)
+            tabular_data = batch['tabular_data'].to(self.device)
+
             # derive labels for batch
-            label_target, label_origin = self.generate_labels(batch=batch)
+            label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
+            
+            # put data on device
+            label_target = label_target.to(self.device)
+            label_origin = label_origin.to(self.device)
+            
             
 
             ############################################################
@@ -96,18 +112,26 @@ class BaselineGenerator(nn.Module):
             ############################################################
             
             # Compute loss with real images
-            out_src = self.D(batch['images'])
+            out_src = self.D(images)
             d_loss_real =  - torch.mean(out_src)
-            
+            #d_loss_real = self.adversarial_loss(out_src, torch.ones_like(out_src))
 
             # Compute loss with fake images
-            x_fake = self.G(batch['images'], label_target.float())
+            x_fake = self.G(images, label_target.float())
             out_src = self.D(x_fake)
             d_loss_fake = torch.mean(out_src)
-            out_domain = self.survival_model.predict_on_images(x_fake)
+            #d_loss_fake = self.adversarial_loss(out_src, torch.zeros_like(out_src))
+            out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
+
+            # Compute loss for gradient penalty
+            alpha = torch.rand(images.size(0), 1, 1, 1).to(self.device)
+            x_hat = (alpha * images.data + (1 - alpha) * x_fake.data).requires_grad_(True)
+            out_src = self.D(x_hat.to(self.device).float())
+            d_loss_gp = self.gradient_penalty(out_src, x_hat)
             
             # Backward and optimize
-            d_loss = d_loss_real + d_loss_fake 
+            d_loss = d_loss_real + d_loss_fake + self.trainer_params['lambda_gp'] * d_loss_gp
+            self.reset_grad()
             d_loss.backward()
             self.d_optimizer.step()
 
@@ -115,6 +139,7 @@ class BaselineGenerator(nn.Module):
             loss = {}
             loss['D/loss_real'] = d_loss_real.item()
             loss['D/loss_fake'] = d_loss_fake.item()
+            loss['D/loss_gp'] = d_loss_gp.item()
 
 
             ############################################################
@@ -125,18 +150,21 @@ class BaselineGenerator(nn.Module):
 
             if (step + 1) % self.trainer_params['n_critic'] == 0:
                 # Original-to-target domain 
-                x_fake = self.G(batch['images'], label_target.float())
+                x_fake = self.G(images, label_target.float())
                 out_src = self.D(x_fake)
-                out_domain = self.survival_model.predict_on_images(x_fake)
+                out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
                 g_loss_fake = - torch.mean(out_src)
+                #g_loss_fake = self.adversarial_loss(out_src, torch.ones_like(out_src))
                 g_loss_cls = self.domain_loss(out_domain, label_target)
 
                 # Target-to-original domain
                 x_reconstruct = self.G(x_fake, label_origin)
-                g_loss_rec = self.reconstruction_loss(batch['images'], x_reconstruct)
+                g_loss_rec = self.reconstruction_loss(images, x_reconstruct)
 
                 # Backward and optimize
                 g_loss = g_loss_fake + self.trainer_params['lambda_rec'] * g_loss_rec + self.trainer_params['lambda_cls'] * g_loss_cls
+                
+                self.reset_grad()
                 g_loss.backward()
                 self.g_optimizer.step()
 
@@ -144,7 +172,9 @@ class BaselineGenerator(nn.Module):
                 loss['G/loss_fake'] = g_loss_fake.item()
                 loss['G/loss_rec'] = g_loss_rec.item()
                 loss['G/loss_cls'] = g_loss_cls.item()
-            
+
+                self.train_history = pd.DataFrame([[value for value in loss.values()]],
+                                                    columns=[key for key in loss.keys()])
 
             # print out training info
             if (step  + 1) % self.trainer_params['log_step'] == 0:
@@ -154,21 +184,66 @@ class BaselineGenerator(nn.Module):
                 for tag, value in loss.items():
                     log += ", {}: {:.4f}".format(tag, value)
                 print(log)
-    
+            
+            if (step + 1) % self.trainer_params['sample_step'] == 0:
+                with torch.no_grad():
+                    x_generated = self.G(images, label_target.float())
+                    # concatenate such that original images and generated images are plotted together!
+                    x_generated = x_generated[0:8, :, :, :]
+                    images = images[0:8, :, :, :]
+                    x_joint = torch.cat((x_generated, images))
+                    path = f"generated_{step}.png"
+                    save_image(x_joint, path, nrow=8)
+
+        plot_train_progress(self.train_history, storage_path="./baseline_generator")
+
     def validate(self, val_gen):
         """
         """
         pass
 
-    def test(self, test_gen):
+    def test(self, batch):
         """
         """
-        pass
+        images = batch['images'].to(self.device)
+        tabular_data = batch['images'].to(self.device)
+
+        # derive labels for batch
+        label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
+        # put data on device
+        label_target = label_target.to(self.device)
+        label_origin = label_origin.to(self.device)
+
+        x_generated = self.G(images, label_target.float())
+
+        return x_generated
+        
+
+    def gradient_penalty(self, y, x):
+        """
+        """
+        weight = torch.ones(y.size()).to(self.device)
+        dydx = torch.autograd.grad(outputs=y,
+                                   inputs=x,
+                                   grad_outputs=weight,
+                                   retain_graph=True,
+                                   create_graph=True,
+                                   only_inputs=True)[0]
+        
+        dydx = dydx.view(dydx.size(0), -1)
+        dydx_l2norm = torch.sqrt(torch.sum(dydx**2, dim=1))
+        
+        return torch.mean((dydx_l2norm - 1)**2)
+
+    def adversarial_loss(self, pred, true):
+        """
+        """
+        return nn.BCELoss(pred, true)
+
 
     def domain_loss(self, preds, target_label, alpha=0.25, tolerance=0.5):
         """Adaptive quantile loss.
         """
-
         errors = torch.zeros(size=preds.shape)
         losses = []
         for idx in range(preds.shape[0]):
@@ -203,11 +278,10 @@ class BaselineGenerator(nn.Module):
 
         return loss
 
-    def generate_labels(self, batch):
+    def generate_labels(self, images, tabular_data):
         """
         """
-
-        prediction = self.survival_model.predict_on_images(images=batch['images'])
+        prediction = self.survival_model.predict_on_images(images=images, tabular_data=tabular_data)
         log_prediction = torch.log(prediction).squeeze(1)
         
         label_target = torch.zeros(size=(log_prediction.shape[0], 2))
