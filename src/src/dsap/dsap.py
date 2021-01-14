@@ -88,10 +88,10 @@ class DSAP():
 
                         out1, out2 = self.lpdn_model(unstructured=inputs, 
                                                      structured=structured_inputs,
-                                                     baselines=baseline_images).to(self.device)
+                                                     baselines=baseline_images)
                     else:
                         out1, out2 = self.lpdn_model(unstructured=inputs,
-                                                     baselines=baseline_images).to(self.device)
+                                                     baselines=baseline_images)
 
                     y1 = out1[0].cpu().detach().numpy()
                     y2 = out2[0].cpu().detach().numpy()
@@ -114,7 +114,3 @@ class DSAP():
                     result += np.reshape(y, shape_out) * mask_output
         result = result.reshape(images.shape)
         return result
-
-
-    def plot_attribution_maps(self):
-        pass

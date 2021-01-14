@@ -21,6 +21,11 @@ parser.add_argument('--config', '-c',
                     default='configs/MNIST/deepcoxph.yaml')
 parser.add_argument('--experiment_name', type=str, default='deepsurv')
 parser.add_argument('--run_name', type=str, default='deepsurv')
+parser.add_argument('--manual_seed', type=int, default=None,
+                    help="seed for reproducibility (default: config file)")
+parser.add_argument('--max_epochs', type=int, default=None,
+                    help="number of epochs (default: config file")
+
 
 args = parser.parse_args()
 
@@ -29,6 +34,10 @@ with open(args.filename, 'r') as file:
         config = yaml.safe_load(file)
     except yaml.YAMLError as exc:
         print(exc)
+
+
+# update config 
+config = update_config(config=config, args=args)
 
 # compile model
 model = parse_model_config(config)
@@ -51,19 +60,7 @@ experiment = DeepSurvExperiment(model,
                                 run_name=args.run_name,
                                 experiment_name=args.experiment_name)
 
-
 # build trainer 
-# runner = Trainer(default_save_path=config['logging_params']['save_dir'],
-#                 min_epochs=1,
-#                 logger=mlflow_logger,
-#                 check_val_every_n_epoch=1,
-#                 train_percent_check=1,
-#                 val_percent_check=1,
-#                 num_sanity_val_steps=5,
-#                 early_stop_callback=False,
-#                 fast_dev_run=False,
-#                 **config['trainer_params'])
-
 runner = Trainer(min_epochs=1,
                 logger=mlflow_logger,
                 check_val_every_n_epoch=1,

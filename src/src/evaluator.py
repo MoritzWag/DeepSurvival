@@ -5,11 +5,13 @@ import numpy as np
 from torch import nn
 
 from sksurv.linear_model.coxph import BreslowEstimator
-from sksurv.metrics import concordance_index_censored, integrated_brier_score
+from sksurv.metrics import concordance_index_censored, integrated_brier_score, brier_score
 
 class Evaluator(nn.Module):
     """
     """
+    quantiles = [0.25, 0.5, 0.75]
+
     def __init__(self, **kwargs):
         super(Evaluator, self).__init__(**kwargs)
         self.scores = {}
@@ -17,12 +19,20 @@ class Evaluator(nn.Module):
     def get_metrics(self, event, time, riskscores, y, times_unique, **kwargs):
         """
         """
+        try:
+            event = event.cpu().detach().numpy()
+            time = time.cpu().detach().numpy()
+        except:
+            pass
         surv_preds = self.get_survival_predictions(riskscores, event, time)
         concordance_index = self.concordance_index(event.astype(np.bool), time, riskscores)
-        ibs = self.integrated_brier_score(y, surv_preds, times_unique)
+        brier_scores = self.brier_score(y, surv_preds, times_unique, self.quantiles)
+        #ibs = self.integrated_brier_score(y, surv_preds, times_unique)
 
+        for key, value in zip(brier_scores.keys(), brier_scores.values()):
+            self.scores[key] = value
         self.scores['cindex'] = concordance_index[0]
-        self.scores['ibs'] = ibs
+        #self.scores['ibs'] = ibs
 
     def concordance_index(self, event, time, riskscores, **kwargs):
         """
@@ -39,6 +49,18 @@ class Evaluator(nn.Module):
 
         return score
     
+    def brier_score(self, y, surv_preds, time, quantiles, **kwargs):
+        """
+        """
+        brier_scores = {}
+        times = np.quantile(time, np.array(quantiles))
+        for i, t in enumerate(times):
+            surv_pred = [fn(t) for fn in surv_preds]
+            ts, score = brier_score(y, y, surv_pred, t)
+            brier_scores[f"quantile_{str(quantiles[i])}"] = score[0]
+
+        return brier_scores
+
     def get_survival_predictions(self, riskscores, event, time, **kwargs):
         """
         """

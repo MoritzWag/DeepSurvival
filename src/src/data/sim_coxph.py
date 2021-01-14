@@ -17,7 +17,7 @@ class SimCoxPH(SimulationData2d):
     num_obs = 10000
     val_size = 0.2 * num_obs 
     num_groups = 4
-    mean_survival_time = 365.0
+    mean_survival_time = 20.0
     prob_censored = 0.45
 
     def __init__(self, 
@@ -25,11 +25,13 @@ class SimCoxPH(SimulationData2d):
                  part='train',
                  download=True,
                  base_folder="mnist2",
-                 data_type='coxph'):
+                 data_type='coxph',
+                 n_dim=1):
         self.root = root
         self.part = part 
         self.base_folder = base_folder 
         self.data_type = data_type
+        self.n_dim = n_dim
         self.final_path = os.path.join(self.root, self.base_folder)
 
         if download: 
@@ -65,17 +67,21 @@ class SimCoxPH(SimulationData2d):
 
         np.random.seed(self.seed)
 
-        if self.base_folder == 'mnist2':
-            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist()
+        if self.base_folder == 'mnist':
+            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist(sample=False)
+        elif self.base_folder == 'mnist3d':
+            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist3d()
+            self.val_size = 500
         else:
             X_train, riskgroup_train, X_test, riskgroup_test = self.simulate_images(img_size=28,
                                                                                     num_obs=self.num_obs,
                                                                                     n_groups=self.num_groups,
+                                                                                    n_dim=self.n_dim,
                                                                                     pos_random=True,
                                                                                     num_shapes=3)
 
         riskgroups = np.concatenate((riskgroup_train, riskgroup_test))
-
+        pdb.set_trace()
         df = self.simulate_coxph_riskscores(riskgroups)
 
 
@@ -88,10 +94,10 @@ class SimCoxPH(SimulationData2d):
 
         df_train = df.iloc[:X_train.shape[0], :]
         df_test = df.iloc[X_train.shape[0]:, :]
-
+        #pdb.set_trace()
         X_train, X_val, df_train, df_val = train_test_split(X_train,
                                                             df_train,
-                                                            test_size=self.val_size,
+                                                            test_size=int(self.val_size),
                                                             stratify=df_train['riskgroup'],
                                                             random_state=self.seed)
 
@@ -156,3 +162,4 @@ class SimCoxPH(SimulationData2d):
         y = np.array(y, dtype=dt)
 
         return {'y': y, 'times_unique': times_unique}
+

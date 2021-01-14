@@ -24,6 +24,7 @@ class DeepCoxPH(BaseModel):
         self.orthogonalize = orthogonalize
         self.overall_dim = self.structured_input_dim + self.deep.fc3.out_features
         self.linear = nn.Linear(in_features=self.overall_dim, out_features=self.output_dim)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, tabular_data, images, **kwargs):
 
@@ -49,14 +50,15 @@ class DeepCoxPH(BaseModel):
         losses = torch.multiply(event, rr - predictions)
         loss = torch.mean(losses)
 
-        return {'loss': loss}
+        return loss
 
 
     def logsumexp_masked(self, risk_scores, mask, axis=0, keepdim=None):
         """
         """
 
-        mask = torch.from_numpy(mask)
+        #mask = torch.from_numpy(mask)
+        mask = mask.to(self.device)
         risk_scores_masked = torch.multiply(risk_scores, mask)
         amax = torch.max(risk_scores_masked, dim=axis, keepdim=True)
         risk_scores_shift = risk_scores_masked - amax[0]
@@ -76,8 +78,10 @@ class DeepCoxPH(BaseModel):
         events = []
         times = []
         for batch, data in enumerate(data):
-            image = data['images'].to(self.device)
-            tabular_date = data['tabular_data'].to(self.device)
+            image = data['images']
+            tabular_date = data['tabular_data']
+            # image = data['images'].to(self.device)
+            # tabular_date = data['tabular_data'].to(self.device)
             event = data['event']
             time = data['time']
             # if cuda: 
@@ -94,7 +98,7 @@ class DeepCoxPH(BaseModel):
         times = torch.cat(times)
 
         dict_batches = {'images': images.float(), 'tabular_data': tabular_data,
-                        'events': events, 'times': times}
+                        'event': events, 'time': times}
 
         return dict_batches
     
@@ -102,7 +106,6 @@ class DeepCoxPH(BaseModel):
         """
         """
         acc_batch = self._accumulate_batches(data=data)
-        pdb.set_trace()
         indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
         
         for value, key in zip(acc_batch.values(), acc_batch.keys()):

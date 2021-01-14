@@ -52,10 +52,6 @@ class SimPED(SimulationData2d):
         ped_status = torch.tensor(df['ped_status'].to_numpy()).to(self.device)
         index = torch.tensor(df['index'].to_numpy()).to(self.device)
         splines = torch.tensor(df[self.splines_list].to_numpy()).to(self.device)
-        
-        # return {'images': images, 'tabular_data': tabular_data,
-        #         'offset': offset, 'ped_status': ped_status, 
-        #         'index': index, 'splines': splines}
 
         return images, tabular_data, offset, ped_status, index, splines
 
@@ -71,8 +67,10 @@ class SimPED(SimulationData2d):
 
         np.random.seed(self.seed)
 
-        if self.base_folder == 'mnist2':
-            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist()
+        if self.base_folder == 'mnist':
+            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist(sample=True)
+        elif self.base_folder == 'mnist3d':
+            X_train, riskgroup_train, X_test, riskgroup_test = self.download_mnist3d()
         else:
             X_train, riskgroup_train, X_test, riskgroup_test = self.simulate_images(img_size=28,
                                                                                     num_obs=self.num_obs,

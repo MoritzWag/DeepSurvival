@@ -2,17 +2,18 @@ import torch
 import numpy as np 
 import pdb
 import torch.nn.functional as F
+
 from torch import nn 
 
 
 class Generator2d(nn.Module):
     """
     """
-    def __init__(self, conv_dim, c_dim=2, repeat_num=6):
+    def __init__(self, n_dim, conv_dim, c_dim=2, repeat_num=6):
         super(Generator2d, self).__init__()
 
         layers = []
-        layers.append(nn.Conv2d(1+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
+        layers.append(nn.Conv2d(n_dim+c_dim, conv_dim, kernel_size=7, stride=1, padding=3, bias=False))
         layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
 
@@ -35,8 +36,9 @@ class Generator2d(nn.Module):
             layers.append(nn.ReLU(inplace=True))
             curr_dim = curr_dim // 2
 
-        layers.append(nn.Conv2d(curr_dim, 1, kernel_size=7, stride=1, padding=3, bias=False))
-        layers.append(nn.Tanh())
+        layers.append(nn.Conv2d(curr_dim, n_dim, kernel_size=7, stride=1, padding=3, bias=False))
+        #layers.append(nn.Tanh())
+        layers.append(nn.Sigmoid())
         self.main = nn.Sequential(*layers)
 
     def forward(self, x, c):
@@ -52,11 +54,11 @@ class Generator2d(nn.Module):
 class Discriminator2d(nn.Module):
     """
     """
-    def __init__(self, img_size=28, conv_dim=64, c_dim=2, repeat_num=6):
+    def __init__(self, img_size=28, n_dim=3, conv_dim=64, c_dim=2, repeat_num=6):
         super(Discriminator2d, self).__init__()
 
         layers = []
-        layers.append(nn.Conv2d(1, conv_dim, kernel_size=4, stride=2, padding=1))
+        layers.append(nn.Conv2d(n_dim, conv_dim, kernel_size=4, stride=2, padding=1))
         layers.append(nn.LeakyReLU(0.01))
 
         curr_dim = conv_dim

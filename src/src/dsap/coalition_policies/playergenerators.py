@@ -11,11 +11,12 @@ def spaced_elements(array, num_elems=4):
 
 
 class AbstractPlayerIterator(ABC):
-    def __init__(self, ground_input, random=False):
+    def __init__(self, ground_input, windows, random=False):
         self._assert_input_compatibility(ground_input)
         if isinstance(ground_input, Tuple):
             ground_input, feats = ground_input
             self.feat_shape = feats.shape[1:]
+        self.windows = windows
         self.input_shape = ground_input.shape[1:]
         self.random = random
         self.n_players = self._get_number_of_players_from_shape()
@@ -83,8 +84,13 @@ class DefaultPlayerIterator(AbstractPlayerIterator):
 
 class ImagePlayerIterator(AbstractPlayerIterator):
 
-    def __init__(self, ground_input, random=False, window_shape=(1, 1, 1)):
+    def __init__(self, 
+                ground_input,
+                windows,
+                random=False, 
+                window_shape=(1, 1, 1)):
         self.window_shape = window_shape
+        self.windows = windows
         assert self.window_shape is not None, "window_shape cannot be None"
         assert len(self.window_shape) == 3, "window_shape must contain 3 elements"
         assert 1 <= window_shape[-1] <= ground_input.shape[-1], \
@@ -112,33 +118,26 @@ class ImagePlayerIterator(AbstractPlayerIterator):
             shape[1] = shape[1] / self.window_shape[1]
         print ('nplayers', np.prod(shape, dtype='int32'))
         return np.prod(shape, dtype='int32')
-
-    # def _get_masks_for_index(self, i):
-    #     mask_input = np.zeros(self.input_shape, dtype='int32')
-    #     mask = np.zeros(self._input_shape_merged())
-    #     i = self.permutation[i]
-
-    #     nrows, ncols = self.input_shape[0] // self.window_shape[0], self.input_shape[1] // self.window_shape[1]
-    #     row_step = self.window_shape[0]
-    #     col_step = self.window_shape[1]
-    #     coalition_size = row_step*col_step
-    #     row = i // nrows
-    #     col = i % ncols
-    #     print (row)
-    #     print (col)
-
-    #     mask_input[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1
-    #     mask[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1. / coalition_size
-
-    #     if self.window_shape[-1] > 1:
-    #         mask_input = np.repeat(mask_input, self.input_shape[-1], -1)
-
-    #     return mask_input, mask
     
     def _get_masks_for_index(self, i):
         mask_input = np.zeros(self.input_shape, dtype=np.float32)
         mask = np.zeros(self.input_shape, dtype=np.float32)
         i = self.permutation[i]
+
+        if self.windows:
+            nrows, ncols = self.input_shape[0] // self.window_shape[0], self.input_shape[1] // self.window_shape[1]
+            row_step = self.window_shape[0]
+            col_step = self.window_shape[1]
+            coalition_size = row_step*col_step
+            row = i // nrows
+            col = i % ncols
+
+            mask_input[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1
+            mask[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1. / coalition_size
+
+            if self.window_shape[-1] > 1:
+                mask_input = np.repeat(mask_input, self.input_shape[-1], -1)
+
 
         height, width = self.input_shape[1:]
         row = i // height
@@ -158,10 +157,12 @@ class WideDeepPlayerIterator(AbstractPlayerIterator):
 
     def __init__(self, 
                  ground_input, 
+                 windows,
                  random: bool = False, 
                  window_shape = (1, 1, 1)) -> None:
         self.window_shape = window_shape
-        super(WideDeepPlayerIterator, self).__init__(ground_input, random)
+        super(WideDeepPlayerIterator, self).__init__(ground_input, windows, random)
+        self.windows = windows
 
     def _input_shape_merged(self):
         shape = list(self.input_shape)
@@ -191,46 +192,33 @@ class WideDeepPlayerIterator(AbstractPlayerIterator):
         num_players_feat = int(self.feat_shape[0])
         return num_players_image + num_players_feat
 
-    # def _get_masks_for_index(self, i:int):
-
-    #     # mask for images 
-    #     mask_input = np.zeros(self.input_shape, dtype=np.float32)
-    #     mask = np.zeros(self.input_shape, dtype=np.float32)
-    #     i = self.permutation[i]
-
-    #     nrows, ncols = self.input_shape[0] // self.window_shape[0], self.input_shape[1] // self.window_shape[1]
-    #     row_step = self.window_shape[0]
-    #     col_step = self.window_shape[1]
-    #     coalition_size = row_step*col_step
-    #     row = i // nrows
-    #     col = i % ncols
-
-    #     mask_input[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1
-    #     mask[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1. / coalition_size
-
-    #     if self.window_shape[-1] > 1:
-    #         mask_input = np.repeat(mask_input, self.input_shape[-1], -1)
-
-    #     mask_feat = np.zeros(self.feat_shape, dtype=np.float32)
-    #     mask_feat_out = np.zeros(self.feat_shape, dtype=np.float32)
-
-    #     #mask_feat_out[i] = 1.0
-    #     mask_feat_out[0] = 1.0
-    #     mask_feat_out = mask_feat_out[np.newaxis]
-
-    #     return ((mask_input, mask_feat), (mask, mask_feat_out))
-
     def _get_masks_for_index(self, i:int):
+        
         mask_input = np.zeros(self.input_shape, dtype=np.float32)
         mask = np.zeros(self.input_shape, dtype=np.float32)
         i = self.permutation[i]
 
-        height, width = self.input_shape[1:]
-        row = i // height
-        col = i % width
+        if self.windows: 
+            nrows, ncols = self.input_shape[0] // self.window_shape[0], self.input_shape[1] // self.window_shape[1]
+            row_step = self.window_shape[0]
+            col_step = self.window_shape[1]
+            coalition_size = row_step*col_step
+            row = i // nrows
+            col = i % ncols
 
-        mask_input[:, row:(1 + row), col:(1 + col)] = 1
-        mask[:, row:(1 + row), col:(1 + col)] = 1.0 / self.coalition_size
+            mask_input[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1
+            mask[row*row_step:(1+row)*row_step, col*col_step:(1+col)*col_step] = 1. / coalition_size
+
+            if self.window_shape[-1] > 1:
+                mask_input = np.repeat(mask_input, self.input_shape[-1], -1)
+                
+        else:
+            height, width = self.input_shape[1:]
+            row = i // height
+            col = i % width
+
+            mask_input[:, row:(1 + row), col:(1 + col)] = 1
+            mask[:, row:(1 + row), col:(1 + col)] = 1.0 / self.coalition_size
 
         mask_feat = np.zeros(self.feat_shape, dtype=np.float32)
         mask_feat_out = np.zeros(self.feat_shape, dtype=np.float32)

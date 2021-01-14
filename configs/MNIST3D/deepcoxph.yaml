@@ -3,10 +3,10 @@ model_params:
     structured_params:
         structured_input_dim: 2
     deep_params:
-        architecture: 'cnn'
+        architecture: 'cnn3d'
         architecture_params: 
             out_dim: 10
-            n_dim: 3
+            n_dim: 1
     wide_deep_params:
         orthogonalize: True
         output_dim: 1
@@ -15,16 +15,15 @@ model_hyperparams:
     loss_type: 'cox_ph'
   
 exp_params:
-    dataset: 'mnist'
+    dataset: 'mnist3d'
     data_path: 'data/coxph/'
-    base_folder: 'simulation'
+    base_folder: 'mnist3d'
     data_type: 'coxph'
-    n_dim: 3
+    n_dim: 1
     batch_size: 64
     learning_rate: 0.005
     weight_decay: 0.0
     scheduler_gamma: 0.95
-
 
 baseline_params:
     baseline: 'stargan'
@@ -32,36 +31,35 @@ baseline_params:
     img_size: 28
     tolerance: 0.5
     discriminator_params:
-        n_dim: 3
-        learning_rate: 0.0001
+        learning_rate: 0.000001
         beta1: 0.5
         beta2: 0.999
         repeat_num: 3
         conv_dim: 64
+        n_dim: 1
     generator_params:
-        n_dim: 3
         learning_rate: 0.0001
         beta1: 0.5
         beta2: 0.999
         repeat_num: 6
         conv_dim: 64
+        n_dim: 1
     trainer_params:
         n_steps: 5000
         dataset: 'idk'
-        n_critic: 5
-        log_step: 250
-        sample_step: 250
+        n_critic: 1
+        log_step: 100
+        sample_step: 100
         lambda_cls: 1.0
-        lambda_rec: 8.0
+        lambda_rec: 10.0
         lambda_gp: 10.0
     logging_params:
-        storage_path: 'sim_copxh_color_target_cls_shapes9'
-        run_name: 'sim'
-
+        storage_path: 'baseline_coxph_new'
+        run_name: 'mnist3d_000001_lo_inverse'
 
 trainer_params:
-    gpu: 1
-    max_epochs: 10
+    gpu: 2
+    max_epochs: 40
   
 logging_params:
     manual_seed: 1234

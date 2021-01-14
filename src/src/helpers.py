@@ -3,12 +3,14 @@ import pdb
 from src.models.deepcoxph import *
 from src.models.deeppam import * 
 from src.architectures.cnn import * 
+from src.architectures.cnn3d import *
 
 
 models = {'DeepCoxPH': DeepCoxPH,
           'DeepPAM': DeepPAM}
 
-architectures = {'cnn': CNN}
+architectures = {'cnn': CNN,
+                'cnn3d': CNN3d}
 
 
 def parse_architecture_config(config):
@@ -29,3 +31,15 @@ def parse_model_config(config):
     return model_instance
 
 
+def update_config(config, args):
+    """
+    """
+    for name, value in vars(args).items():
+        if value is None:
+            continue
+
+        for key in config.keys():
+            if config[key].__contains__(name):
+                config[key][name] = value
+
+    return config

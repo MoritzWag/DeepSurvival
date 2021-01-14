@@ -6,7 +6,7 @@ from torch import Tensor
 from torch.nn import Conv1d, Conv2d
 
 import torch.nn.functional as F
-
+torch.set_default_dtype(torch.float64)
 
 def square(x: torch.Tensor) -> torch.Tensor:
     return torch.pow(x, torch.tensor([2.0], device=x.device))
@@ -89,6 +89,11 @@ class ProbConv2dInput(Conv2d):
             mu1.add_(b)
             mu2.add_(b)
 
+        mu1 = mu1.float()
+        v1 = v1.float()
+        mu2 = mu2.float()
+        v2 = v2.float()
+        
         return (mu1, v1), (mu2, v2)
 
 

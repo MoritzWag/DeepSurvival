@@ -30,6 +30,7 @@ def get_eval_data(batch, model):
         prediction = np.stack(prediction)
     else:
         prediction = model(**batch).cpu().detach().numpy()
+        prediction = prediction.squeeze(1)
 
 
     return {'riskscores': prediction}
@@ -129,35 +130,104 @@ def make_riskset(time):
     return risk_set
 
   
+# def rectangle_mask(img_size, 
+#                    length,
+#                    gray_scale,
+#                    pos_random=True,
+#                    seed=1328):
+
+#     random = np.random.RandomState(seed)
+#     img = np.zeros((1, img_size, img_size), dtype='float32')
+
+#     if pos_random is False:
+#         upper_corner = [14, 14]
+#     else:
+#         height = random.randint(img_size, size=1)[0]
+#         width = random.randint(img_size-length, size=1)[0]
+#         upper_corner = [height, width]
+    
+#     img[:, upper_corner[0]- length: upper_corner[0], upper_corner[1]:upper_corner[1]+length] = gray_scale
+
+#     return img 
+
+
 def rectangle_mask(img_size, 
                    length,
-                   gray_scale,
+                   color,
+                   n_dim,
                    pos_random=True,
                    seed=1328):
 
     random = np.random.RandomState(seed)
-    img = np.zeros((1, img_size, img_size), dtype='float32')
+    if n_dim == 1:
+        img = np.zeros((n_dim, img_size, img_size), dtype='float32')
+    else:
+        img = np.zeros((img_size, img_size, n_dim), dtype='float32')
 
     if pos_random is False:
-        upper_corner = [14, 14]
+        upper_corner = (14, 14)
+        lower_corner = (10, 10)
     else:
         height = random.randint(img_size, size=1)[0]
         width = random.randint(img_size-length, size=1)[0]
-        upper_corner = [height, width]
-    
-    img[:, upper_corner[0]- length: upper_corner[0], upper_corner[1]:upper_corner[1]+length] = gray_scale
+        upper_corner = (height, width)
+    if n_dim == 1:
+        img[:, upper_corner[0]- length: upper_corner[0], upper_corner[1]:upper_corner[1]+length] = color
+    else:
+        # pdb.set_trace()
+        # lower_corner = (upper_corner[0]-length, upper_corner[1]-length)
+        # img = cv2.rectangle(img, lower_corner, upper_corner, color, thickness=-1)
+        # img = img.reshape(n_dim, img_size, img_size)
+
+        left_corner = [14, 14]
+        # points = np.array([[left_corner[0], left_corner[1]],
+        #                 [left_corner[0] + 10, left_corner[1]],
+        #                 [left_corner[0], left_corner[1] + 10],
+        #                 [left_corner[0] + 10, left_corner[1] + 10]], np.int32)
+        points = np.array([[left_corner[0], left_corner[1]],
+                        [left_corner[0], left_corner[1] + length],
+                        [left_corner[0] + length, left_corner[1] + length],
+                        [left_corner[0] + length, left_corner[1]]], np.int32)
+
+        
+        image = cv2.fillPoly(img, [points], color=color)
+        img = image.reshape(n_dim, img_size, img_size)
 
     return img 
 
 
+# def triangle_mask(img_size,
+#                   length,
+#                   gray_scale,
+#                   pos_random=True,
+#                   seed=1328):
+
+#     random = np.random.RandomState(seed)
+#     img = np.zeros((img_size, img_size, 1), dtype='float32')
+#     if pos_random is False:
+#         left_corner = [14, 14]
+#     else:
+#         left_corner = [random.randint(img_size-5, size=1)[0], random.randint(img_size-5, size=1)[0]]
+    
+#     points = np.array([[left_corner[0], left_corner[1]],
+#                        [left_corner[0] + 5, left_corner[1] + 5],
+#                        [left_corner[0], left_corner[1] + 10]], np.int32)
+    
+#     image = cv2.fillPoly(img, [points], color=gray_scale)
+
+#     image = image.reshape(1, img_size, img_size)
+
+#     return image
+
 def triangle_mask(img_size,
                   length,
-                  gray_scale,
+                  color,
+                  n_dim,
                   pos_random=True,
                   seed=1328):
 
     random = np.random.RandomState(seed)
-    img = np.zeros((img_size, img_size, 1), dtype='float32')
+    img = np.zeros((img_size, img_size, n_dim), dtype='float32')
     if pos_random is False:
         left_corner = [14, 14]
     else:
@@ -167,29 +237,54 @@ def triangle_mask(img_size,
                        [left_corner[0] + 5, left_corner[1] + 5],
                        [left_corner[0], left_corner[1] + 10]], np.int32)
     
-    image = cv2.fillPoly(img, [points], color=gray_scale)
+    image = cv2.fillPoly(img, [points], color=color)
 
-    image = image.reshape(1, img_size, img_size)
+    image = image.reshape(n_dim, img_size, img_size)
+
+    print('worked triangle')
 
     return image
 
 
+# def circle_mask(img_size,
+#                 center,
+#                 radius,
+#                 gray_scale,
+#                 pos_random=True,
+#                 seed=1328):
+
+#     random = np.random.RandomState(seed)
+#     img = np.zeros((img_size, img_size, 1), dtype='float32')
+#     if pos_random is False:
+#         center = center
+#     else:
+#         center = (random.randint(img_size - radius, size=1)[0], random.randint(img_size - radius, size=1)[0])
+    
+#     img = cv2.circle(img, center, radius, gray_scale, thickness=-1)
+
+#     image = img.reshape(1, img_size, img_size)
+
+#     return image
+
 def circle_mask(img_size,
                 center,
                 radius,
-                gray_scale,
+                color,
+                n_dim,
                 pos_random=True,
                 seed=1328):
 
     random = np.random.RandomState(seed)
-    img = np.zeros((img_size, img_size, 1), dtype='float32')
+    img = np.zeros((img_size, img_size, n_dim), dtype='float32')
     if pos_random is False:
         center = center
     else:
         center = (random.randint(img_size - radius, size=1)[0], random.randint(img_size - radius, size=1)[0])
     
-    img = cv2.circle(img, center, radius, gray_scale, thickness=-1)
+    img = cv2.circle(img, center, radius, color, thickness=-1)
 
-    image = img.reshape(1, img_size, img_size)
+    image = img.reshape(n_dim, img_size, img_size)
+
+    print("worked circle")
 
     return image

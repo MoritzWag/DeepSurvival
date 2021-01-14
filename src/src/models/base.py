@@ -9,6 +9,7 @@ from src.dsap.layers.convolution import ProbConv2dInput
 from src.dsap.layers.linear import ProbLinearInput
 
 from lpdn import convert_to_lpdn, convert_layer
+#torch.set_default_dtype(torch.float64)
 
 class BaseModel(ABC, Evaluator, Visualizer):
     """
@@ -140,6 +141,7 @@ class LPModel(nn.Module):
                  orthogonalize,
                  _orthogonalize):
         super(LPModel, self).__init__() 
+        #self.deep = nn.Sequential(*deep).float()
         self.deep = nn.Sequential(*deep)
         self.concat_layer = concat_layer
         self.unstructured_input_layer = unstructured_input_layer
@@ -148,7 +150,6 @@ class LPModel(nn.Module):
         self._orthogonalize = orthogonalize
 
     def forward(self, structured, unstructured, baselines): 
-        pdb.set_trace()
         unstructured_input = self.unstructured_input_layer(unstructured, baselines)
         structured_input = self.structured_input_layer(structured)
 
@@ -157,20 +158,40 @@ class LPModel(nn.Module):
         (m1s, v1s), (m2s, v2s) = structured_input
 
         # run through observations with feature i 
-        m1u, v1u = self.deep((m1u, v1u))
+        #pdb.set_trace()
+        # m1u, v1u = self.deep((m1u.float(), v1u.float()))
+        try:
+            m1u, v1u = self.deep((m1u, v1u))
+        except:
+            print('NOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
+            self.deep = self.deep.double()
+            m1u, v1u = self.deep((m1u, v1u))
         # concatenate with structured input 
         m1 = torch.cat((m1u, m1s), axis=1)
         v1 = torch.cat((v1u, v1s), axis=1)
-
-        m1, v1 = self.concat_layer((m1, v1))
+        try:
+            m1, v1 = self.concat_layer((m1.float(), v1.float()))
+        except:
+            self.concat_layer = self.concat_layer.double()
+            m1, v1 = self.concat_layer((m1, v1))
         mv1 = (m1, v1)
+
         # run through observations without feature i
-        m2u, v2u = self.deep((m2u, v2u))
+        try:
+            m2u, v2u = self.deep((m2u, v2u))
+        except:
+            self.deep = self.deep.double()
+            m2u, v2u = self.deep((m2u, v2u))        
+        
         # concatenate with structured input 
         m2 = torch.cat((m2u, m2s), axis=1)
         v2 = torch.cat((v2u, v2s), axis=1)
 
-        m2, v2 = self.concat_layer((m2, v2))
+        try:
+            m2, v2 = self.concat_layer((m2.float(), v2.float()))
+        except:
+            self.concat_layer = self.concat_layer.double()
+            m2, v2 = self.concat_layer((m2, v2))
 
         mv2 = (m2, v2)
 

@@ -17,8 +17,10 @@ from src.dsap.dsap import DSAP
 from src.dsap.coalition_policies.playergenerators import *
 from src.integrated_gradients import IntegratedGradients
 from src.baselines.baseline_generator import BaselineGenerator
+from src.occlusion import Occlusion
 
 from src.architectures.network2d import Discriminator2d, Generator2d
+from src.architectures.network3d import Discriminator3d, Generator3d
 
 
 
@@ -56,54 +58,33 @@ class DeepSurvExperiment(pl.LightningModule):
 
         y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
-            train_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
+            train_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
         else:
             train_loss = self.model._loss_function(y_pred, batch['ped_status'])
-
-        # if self.params['data_type'] == 'coxph':
-        #     image, tabular_data, event, time = batch
-        #     riskset = utils.make_riskset(time)
-
-        #     y_pred = self.forward(tabular_data, image.float())
-        #     train_loss = self.model._loss_function(event, riskset, predictions=y_pred)
-
-        # else:
-        #     image, tabular_data, offset, ped_status, index, splines = batch
-        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-        #     train_loss = self.model._loss_function(y_pred, ped_status)
         
         train_loss = {'loss': train_loss}
 
-        self.train_history = pd.DataFrame([[value.cpu().detach().numpy() for value in train_loss.values()]],
+        train_history = pd.DataFrame([[value.cpu().detach().numpy() for value in train_loss.values()]],
                             columns=[key for key in train_loss.keys()])
+
+        self.train_history = self.train_history.append(train_history, ignore_index=True)
 
         return train_loss
 
     def validation_step(self, batch, batch_idx):
-
+        
         y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
-            val_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
+            val_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
         else:
             val_loss = self.model._loss_function(y_pred, batch['ped_status'])
         
-        # if self.params['data_type'] == 'coxph':
-        #     image, tabular_data, event, time = batch
-        #     riskset = utils.make_riskset(time)
-            
-        #     y_pred = self.forward(tabular_data, image.float())
-        #     val_loss = self.model._loss_function(event, riskset, predictions=y_pred)
-
-        # else:
-        #     pdb.set_trace()
-        #     image, tabular_data, offset, ped_status, index, splines = batch
-        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-        #     val_loss = self.model._loss_function(y_pred, ped_status)
-        
         val_loss = {'loss': val_loss}
 
-        self.val_history = pd.DataFrame([[value.cpu().detach().numpy() for value in val_loss.values()]],
+        val_history = pd.DataFrame([[value.cpu().detach().numpy() for value in val_loss.values()]],
                         columns=[key for key in val_loss.keys()])
+        
+        self.val_history = self.val_history.append(val_history, ignore_index=True)
 
         return val_loss
 
@@ -112,32 +93,26 @@ class DeepSurvExperiment(pl.LightningModule):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
+        self.logger.experiment.log_metric(key='avg_val_loss',
+                                          value=avg_loss,
+                                          run_id=self.logger.run_id)
+
         return {'avg_loss': avg_loss}
 
     def test_step(self, batch, batch_idx):
 
         y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
-            test_loss = self.model._loss_function(batch['event'], batch['risket'], predictions=y_pred)
+            test_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
         else:
             test_loss = self.model._loss_function(y_pred, batch['ped_status'])
-
-        # if self.params['data_type'] == 'coxph':
-        #     image, tabular_data, event, time = batch
-        #     riskset = utils.make_riskset(time)
-
-        #     y_pred = self.forward(tabular_data, image.float())
-        #     test_loss = self.model._loss_function(event, riskset, predictions=y_pred)
-
-        # else:
-        #     image, tabular_data, offset, ped_status, index, splines = batch
-        #     y_pred = self.forward(tabular_data, image.float(), offset, index, splines)
-        #     test_loss = self.model._loss_function(y_pred, ped_status)
         
         test_loss = {'loss': test_loss}
         
-        self.test_history = pd.DataFrame([[value.cpu().detach().numpy() for value in test_loss.values()]],
+        test_history = pd.DataFrame([[value.cpu().detach().numpy() for value in test_loss.values()]],
                             columns=[key for key in test_loss.keys()])
+        
+        self.test_history = self.test_history.append(test_history, ignore_index=True)
 
         return test_loss
 
@@ -147,6 +122,10 @@ class DeepSurvExperiment(pl.LightningModule):
         torch.set_grad_enabled(True)
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
+
+        self.logger.experiment.log_metric(key='avg_test_loss',
+                                          value=avg_loss,
+                                          run_id=self.logger.run_id)
 
         try:
             plot_train_progress(self.train_history, 
@@ -165,6 +144,7 @@ class DeepSurvExperiment(pl.LightningModule):
         evaluation_data = {**accumulated_batch, **self.eval_data, **eval_data}
        
         # get survival cindex and ibs
+        # ibs is very slow in MNIST
         self.model.get_metrics(**evaluation_data)
         
         # log metrics
@@ -174,7 +154,8 @@ class DeepSurvExperiment(pl.LightningModule):
                                               run_id=self.logger.run_id)
 
 
-        # # train baseline generator 
+        # train baseline generator 
+
         baseline_generator = BaselineGenerator(discriminator=Discriminator2d,
                                                generator=Generator2d,
                                                survival_model=self.model,
@@ -183,28 +164,26 @@ class DeepSurvExperiment(pl.LightningModule):
                                                img_size=self.baseline_params['img_size'],
                                                generator_params=self.baseline_params['generator_params'],
                                                discriminator_params=self.baseline_params['discriminator_params'],
-                                               trainer_params=self.baseline_params['trainer_params'])
+                                               trainer_params=self.baseline_params['trainer_params'],
+                                               logging_params=self.baseline_params['logging_params'])
 
-        # train baseline generator
+        # # train baseline generator
         baseline_generator.train(train_gen=self.train_gen)
         
-        # validate baseline generator
-        #baseline_generator.validate(val_gen=self.val_gen)
+        # # validate baseline generator
+        # baseline_generator.validate(val_gen=self.val_gen)
         
-        #baseline_images = baseline_generator.test(batch=accumulated_batch)
-        baseline_images = baseline_generator.test(batch=sample_batch)
-
-        ##################################################################################################
-        ## derive feature attributions
-
-        #images, tabular_data = images[:4, :, :, ], tabular_data[:4, :]
-        # I think, we should determine how many images to be calculated in the attribution method itself!
-
-        #images, tabular_data = accumulated_batch['images'][:4, :, :, ], accumulated_batch['tabular_data'][:4, :]
+        # baseline_images = baseline_generator.test(batch=accumulated_batch)
+        # baseline_images = baseline_generator.test(batch=sample_batch)
         
-        images, tabular_data = sample_batch['images'], sample_batch['tabular_data']
+        # baseline_images = torch.zeros(sample_batch['images'].shape).to(self.device).float()
 
-        # 1.) Calculate Integrated Gradients
+        # ##################################################################################################
+        # ## derive feature attributions
+        
+        # images, tabular_data = sample_batch['images'], sample_batch['tabular_data']
+
+        # # 1.) Calculate Integrated Gradients
         # IG = IntegratedGradients()
         # integrated_gradients = IG.integrated_gradients(model=self.model,
         #                                                images=images,
@@ -213,6 +192,13 @@ class DeepSurvExperiment(pl.LightningModule):
         #                                                baseline=baseline_images,
         #                                                storage_path="euclidean_morph",
         #                                                run_name=self.run_name)
+
+        # self.model.visualize_attributions(images=images, 
+        #                                   attributions=integrated_gradients,
+        #                                   method='integrated_gradient',
+        #                                   storage_path="attributions",
+        #                                   run_name=self.run_name)
+
         # wasserstein_ig = IG.wasserstein_integrated_gradients(model=self.model,
         #                                                      images=images,
         #                                                      baseline=baseline_images,
@@ -221,12 +207,6 @@ class DeepSurvExperiment(pl.LightningModule):
         #                                                      storage_path="wasserstein_morph",
         #                                                      run_name=self.run_name)
 
-        # pdb.set_trace()
-        # self.model.visualize_attributions(images=images, 
-        #                                   attributions=integrated_gradients,
-        #                                   method='integrated_gradient',
-        #                                   storage_path="attributions",
-        #                                   run_name=self.run_name)
 
         # self.model.visualize_attributions(images=images,
         #                                   attributions=wasserstein_ig,
@@ -234,30 +214,52 @@ class DeepSurvExperiment(pl.LightningModule):
         #                                   storage_path='attributions',
         #                                   run_name=self.run_name)
 
-        # 2.) Calculate approximate Shapley Values
-        lpdn_model = self.model._build_lpdn_model()
+        # # 2.) Calculate approximate Shapley Values
+        # lpdn_model = self.model._build_lpdn_model()
 
-        dsap = DSAP(player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data)),
-                    input_shape=images[0].shape,
-                    lpdn_model=lpdn_model)
-        shapley_attributions = dsap.run(images=images, 
-                                        tabular_data=tabular_data,
-                                        baselines=baseline_images, 
-                                        steps=50)
-        self.model.visualize_attributions(images=images, 
-                                          attributions=shapley_attributions,
-                                          method='shapley',
-                                          storage_path='attributions',
-                                          run_name=self.run_name)
+        # dsap = DSAP(player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data), windows=False),
+        #             input_shape=images[0].shape,
+        #             lpdn_model=lpdn_model)
+        # shapley_attributions = dsap.run(images=images, 
+        #                                 tabular_data=tabular_data,
+        #                                 baselines=baseline_images, 
+        #                                 steps=50)
+        # self.model.visualize_attributions(images=images, 
+        #                                   attributions=shapley_attributions,
+        #                                   method='shapley',
+        #                                   storage_path='attributions',
+        #                                   run_name=self.run_name)
 
         # # 3.) Calculate Occlusion
-        # occ = Occlusion(player_generator,
-        #                 input_shape,
-        #                 baseline,
-        #                 )
-        # occlusion_attributions = 
+        # occlusion = Occlusion(model=self.model,
+        #                       player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data), 
+        #                                                               windows=False))
+        # occ_attributions = occlusion.run(images=images,
+        #                                  tabular_data=tabular_data,
+        #                                  baselines=baseline_images)
+        # self.model.visualize_attributions(images=images,
+        #                                   attributions=occ_attributions,
+        #                                   method='occlusion',
+        #                                   storage_path='attributions',
+        #                                   run_name=self.run_name)
 
 
+        # logging
+        for _name, _param in zip(self.params.keys(), self.params.values()):
+            self.logger.experiment.log_param(key=_name,
+                                             value=_param,
+                                             run_id=self.logger.run_id)
+        
+        self.logger.experiment.log_param(key='run_name',
+                                         value=self.run_name,
+                                         run_id=self.logger.run_id)
+        self.logger.experiment.log_param(key='experiment_name',
+                                         value=self.experiment_name,
+                                         run_id=self.logger.run_id)
+        self.logger.experiment.log_param(key='manual_seed',
+                                         value=self.log_params['manual_seed'],
+                                         run_id=self.logger.run_id)
+        
         return {'avg_loss': avg_loss}
 
     def configure_optimizers(self):
@@ -288,7 +290,8 @@ class DeepSurvExperiment(pl.LightningModule):
             train_data = SimCoxPH(root='./data',
                                   part='train',
                                   base_folder=self.params['base_folder'],
-                                  data_type=self.params['data_type'])
+                                  data_type=self.params['data_type'],
+                                  n_dim=self.params['n_dim'])
             self.train_gen = DataLoader(dataset=train_data,
                                    batch_size=self.params['batch_size'],
                                    collate_fn=utils.cox_collate_fn,
@@ -312,7 +315,8 @@ class DeepSurvExperiment(pl.LightningModule):
             val_data = SimCoxPH(root='./data',
                                   part='val',
                                   base_folder=self.params['base_folder'],
-                                  data_type=self.params['data_type'])
+                                  data_type=self.params['data_type'],
+                                  n_dim=self.params['n_dim'])
             self.val_gen = DataLoader(dataset=val_data,
                                    batch_size=self.params['batch_size'],
                                    collate_fn=utils.cox_collate_fn,
@@ -336,7 +340,8 @@ class DeepSurvExperiment(pl.LightningModule):
             test_data = SimCoxPH(root='./data',
                                   part='test',
                                   base_folder=self.params['base_folder'],
-                                  data_type=self.params['data_type'])
+                                  data_type=self.params['data_type'],
+                                  n_dim=self.params['n_dim'])
             self.test_gen = DataLoader(dataset=test_data,
                                    batch_size=self.params['batch_size'],
                                    collate_fn=utils.cox_collate_fn,

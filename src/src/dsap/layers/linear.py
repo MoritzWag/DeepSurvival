@@ -32,7 +32,6 @@ class ProbLinearInput(torch.nn.Linear):
             inputs (): Inputs in a tuple of (Input, mask, k)
         Returns: Mean and variance of the input distribution with (mv1) and without (mv2) masked features.
         """
-        pdb.set_trace()
         # Note: Takes zero baseline as default, does not use DaspConfig
         input_, mask, k = inputs
         assert len(mask.shape) == len(
