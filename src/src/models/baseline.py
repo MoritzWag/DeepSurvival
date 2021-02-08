@@ -1,44 +1,27 @@
-
 import torch 
 import pdb
 import numpy as np 
 
-from torch import nn
+from torch import nn 
 from src.models.base import BaseModel
 
 
-class DeepCoxPH(BaseModel):
+class Baseline(BaseModel):
     """
     """
-    def __init__(self,
-                 deep: nn.Module, 
+    def __init__(self, 
                  structured_input_dim: int, 
-                 out_dim: int, 
                  output_dim: int,
-                 orthogonalize: bool,
                  **kwargs):
-        super(DeepCoxPH, self).__init__()
+        super(Baseline, self).__init__()
 
-        self.deep = deep 
-        self.output_dim = output_dim
         self.structured_input_dim = structured_input_dim
-        self.orthogonalize = orthogonalize
-        self.overall_dim = self.structured_input_dim + self.deep.out_dim
-        self.linear = nn.Linear(in_features=self.overall_dim, out_features=self.output_dim)
+        self.output_dim = output_dim 
+        self.linear = nn.Linear(in_features=self.structured_input_dim, out_features=self.output_dim)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def forward(self, tabular_data, images, **kwargs):
-        
-        unstructured = self.deep(images)
-        if self.orthogonalize:
-            unstructured_orth = self._orthogonalize(tabular_data, unstructured)
-            features_concatenated = torch.cat((tabular_data, unstructured_orth), axis=1)
-        else:
-            features_concatenated = torch.cat((tabular_data, unstructured), axis=1)
-        
-        riskscore = self.linear(features_concatenated.float())
-
-        return riskscore
+    def forward(self, tabular_data, **kwargs):
+        return self.linear(tabular_data.float())
 
     def _loss_function(self, event, riskset, predictions):
         """
@@ -52,13 +35,10 @@ class DeepCoxPH(BaseModel):
         loss = torch.mean(losses)
 
         return loss
-
-
-    def logsumexp_masked(self, risk_scores, mask, axis=0, keepdim=None):
+    
+    def logsumexp_masked(self, risk_scores, mask, axis=0, keepdim=True):
         """
         """
-
-        #mask = torch.from_numpy(mask)
         mask = mask.to(self.device)
         risk_scores_masked = torch.multiply(risk_scores, mask)
         amax = torch.max(risk_scores_masked, dim=axis, keepdim=True)
@@ -102,7 +82,7 @@ class DeepCoxPH(BaseModel):
                         'event': events, 'time': times}
 
         return dict_batches
-    
+
     def _sample_batch(self, data, num_obs):
         """
         """
@@ -114,17 +94,5 @@ class DeepCoxPH(BaseModel):
         
         return acc_batch
 
-    def predict_on_images(self, images, tabular_data, **kwargs):
-        """
-        """
-        unstructured = self.deep(images)
-        if self.orthogonalize:
-            unstructured_orth = self._orthogonalize(tabular_data, unstructured)
-        else:
-            unstructured_orth = unstructured
-        
-        weights = self.linear.weight.data
-        unstructured_weights = weights[:, 0:unstructured_orth.shape[1]]
-        out = unstructured_orth.matmul(unstructured_weights.t())
-        
-        return out
+    def predict_on_images(self, **kwargs):
+        pass

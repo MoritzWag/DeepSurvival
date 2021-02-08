@@ -81,7 +81,6 @@ class SimCoxPH(SimulationData2d):
                                                                                     num_shapes=3)
 
         riskgroups = np.concatenate((riskgroup_train, riskgroup_test))
-        pdb.set_trace()
         df = self.simulate_coxph_riskscores(riskgroups)
 
 

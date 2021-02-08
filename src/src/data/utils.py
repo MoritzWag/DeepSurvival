@@ -4,8 +4,28 @@ import pandas as pd
 import pdb 
 import cv2
 import torch
+
 from torch.utils import data 
+from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
+
+from src.data.adni import ADNI 
+
+
+def get_dataloader(root, part, transform,
+                   base_folder, data_type, batch_size):
+    """
+    """
+    data = ADNI(root=root, 
+                part=part,
+                transform=transform,
+                base_folder=base_folder,
+                data_type=data_type)
+    data_gen = DataLoader(dataset=data,
+                          batch_size=batch_size,
+                          shuffle=False)
+
+    return data_gen
 
 
 def get_eval_data(batch, model):
@@ -31,34 +51,13 @@ def get_eval_data(batch, model):
     else:
         prediction = model(**batch).cpu().detach().numpy()
         prediction = prediction.squeeze(1)
-
-
-    return {'riskscores': prediction}
-
-
-# def ped_collate_fn(batch, data_collate=default_collate):
-#     # images
-#     #pdb.set_trace()
-#     batch = list(zip(*batch))
-#     data = []
-#     images = data_collate(batch[0])
-#     data.append(images)
-
-#     # tabular data
-#     td = np.vstack(batch[1])
-#     data.append(torch.from_numpy(td))
-#     offset = np.hstack(batch[2])
-#     data.append(torch.from_numpy(offset))
-#     ped_status = np.hstack(batch[3])
-#     data.append(torch.from_numpy(ped_status))
-#     index = np.hstack(batch[4])
-#     data.append(torch.from_numpy(index))
-#     splines = np.vstack(batch[5])
-#     data.append(torch.from_numpy(splines))
-
-#     return {'images': data[0].float(), 'tabular_data': data[1],
-#             'offset': data[2], 'ped_status': data[3], 
-#             'index': data[4], 'splines': data[5]}
+    
+    try:
+        image_prediction = model.predict_on_images(**batch)
+        image_prediction = image_prediction.squeeze(1)
+        return {'riskscores': prediction, 'riskscore_img': image_prediction}
+    except:
+        return {'riskscores': prediction}
 
 
 def ped_collate_fn(batch, data_collate=default_collate):
@@ -129,28 +128,6 @@ def make_riskset(time):
 
     return risk_set
 
-  
-# def rectangle_mask(img_size, 
-#                    length,
-#                    gray_scale,
-#                    pos_random=True,
-#                    seed=1328):
-
-#     random = np.random.RandomState(seed)
-#     img = np.zeros((1, img_size, img_size), dtype='float32')
-
-#     if pos_random is False:
-#         upper_corner = [14, 14]
-#     else:
-#         height = random.randint(img_size, size=1)[0]
-#         width = random.randint(img_size-length, size=1)[0]
-#         upper_corner = [height, width]
-    
-#     img[:, upper_corner[0]- length: upper_corner[0], upper_corner[1]:upper_corner[1]+length] = gray_scale
-
-#     return img 
-
-
 def rectangle_mask(img_size, 
                    length,
                    color,
@@ -174,16 +151,7 @@ def rectangle_mask(img_size,
     if n_dim == 1:
         img[:, upper_corner[0]- length: upper_corner[0], upper_corner[1]:upper_corner[1]+length] = color
     else:
-        # pdb.set_trace()
-        # lower_corner = (upper_corner[0]-length, upper_corner[1]-length)
-        # img = cv2.rectangle(img, lower_corner, upper_corner, color, thickness=-1)
-        # img = img.reshape(n_dim, img_size, img_size)
-
         left_corner = [14, 14]
-        # points = np.array([[left_corner[0], left_corner[1]],
-        #                 [left_corner[0] + 10, left_corner[1]],
-        #                 [left_corner[0], left_corner[1] + 10],
-        #                 [left_corner[0] + 10, left_corner[1] + 10]], np.int32)
         points = np.array([[left_corner[0], left_corner[1]],
                         [left_corner[0], left_corner[1] + length],
                         [left_corner[0] + length, left_corner[1] + length],
@@ -194,30 +162,6 @@ def rectangle_mask(img_size,
         img = image.reshape(n_dim, img_size, img_size)
 
     return img 
-
-
-# def triangle_mask(img_size,
-#                   length,
-#                   gray_scale,
-#                   pos_random=True,
-#                   seed=1328):
-
-#     random = np.random.RandomState(seed)
-#     img = np.zeros((img_size, img_size, 1), dtype='float32')
-#     if pos_random is False:
-#         left_corner = [14, 14]
-#     else:
-#         left_corner = [random.randint(img_size-5, size=1)[0], random.randint(img_size-5, size=1)[0]]
-    
-#     points = np.array([[left_corner[0], left_corner[1]],
-#                        [left_corner[0] + 5, left_corner[1] + 5],
-#                        [left_corner[0], left_corner[1] + 10]], np.int32)
-    
-#     image = cv2.fillPoly(img, [points], color=gray_scale)
-
-#     image = image.reshape(1, img_size, img_size)
-
-#     return image
 
 def triangle_mask(img_size,
                   length,
@@ -244,27 +188,6 @@ def triangle_mask(img_size,
     print('worked triangle')
 
     return image
-
-
-# def circle_mask(img_size,
-#                 center,
-#                 radius,
-#                 gray_scale,
-#                 pos_random=True,
-#                 seed=1328):
-
-#     random = np.random.RandomState(seed)
-#     img = np.zeros((img_size, img_size, 1), dtype='float32')
-#     if pos_random is False:
-#         center = center
-#     else:
-#         center = (random.randint(img_size - radius, size=1)[0], random.randint(img_size - radius, size=1)[0])
-    
-#     img = cv2.circle(img, center, radius, gray_scale, thickness=-1)
-
-#     image = img.reshape(1, img_size, img_size)
-
-#     return image
 
 def circle_mask(img_size,
                 center,

@@ -16,7 +16,7 @@ class Evaluator(nn.Module):
         super(Evaluator, self).__init__(**kwargs)
         self.scores = {}
 
-    def get_metrics(self, event, time, riskscores, y, times_unique, **kwargs):
+    def get_metrics(self, event, time, riskscores, y, times_unique, part, **kwargs):
         """
         """
         try:
@@ -30,8 +30,8 @@ class Evaluator(nn.Module):
         #ibs = self.integrated_brier_score(y, surv_preds, times_unique)
 
         for key, value in zip(brier_scores.keys(), brier_scores.values()):
-            self.scores[key] = value
-        self.scores['cindex'] = concordance_index[0]
+            self.scores[f"{key}_{part}"] = value
+        self.scores[f'cindex_{part}'] = concordance_index[0]
         #self.scores['ibs'] = ibs
 
     def concordance_index(self, event, time, riskscores, **kwargs):

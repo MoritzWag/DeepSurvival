@@ -174,3 +174,52 @@ class Visualizer(nn.Module):
             os.makedirs(storage_path)
 
         fig.savefig(f"{storage_path}/baseline3d_{step}.png")
+
+
+    def plot_riskscores(self, 
+                        riskscores,
+                        storage_path,
+                        run_name,
+                        epoch):
+        """
+        """
+        try:
+            riskscores = riskscores.detach().cpu().numpy()
+        except:
+            pass
+        plt.close()
+
+        plt.hist(riskscores, bins='auto')
+
+        storage_path = os.path.expanduser(storage_path)
+        storage_path = f"{storage_path}/{run_name}"
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
+        plt.savefig(f"{storage_path}/hist_rs_{epoch}.png")
+
+    def plot_gen_origin_rs(self, 
+                           rs_origin,
+                           rs_generated,
+                           storage_path,
+                           run_name,
+                           epoch):
+        """
+        """
+        try:
+            rs_origin = rs_origin.detach().cpu().numpy()
+            rs_generated = rs_generated.detach().cpu().numpy()
+        except:
+            pass 
+
+        plt.close()
+        plt.scatter(x=rs_origin, y=rs_generated)
+
+        storage_path = os.path.expanduser(storage_path)
+        storage_path = f"{storage_path}/{run_name}"
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
+        plt.savefig(f"{storage_path}/scatter_orig_gen_{epoch}.png")
+        plt.close()
+    

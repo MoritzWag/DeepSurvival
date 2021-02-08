@@ -69,6 +69,8 @@ def get_mlflow_results(mlflow_id, path=None):
                                 'avg_test_loss',
                                 'avg_val_loss',
                                 'cindex',
+                                'cindex_train',
+                                'cindex_test',
                                 'quantile_0.5',
                                 'quantile_0.25',
                                 'quantile_0.75'])
@@ -102,6 +104,14 @@ def get_mlflow_results(mlflow_id, path=None):
             cindex = open(f'{path}/{run}/metrics/cindex').read().split()[1]
         except:
             cindex = 0.0 
+        try: 
+            cindex_train = open(f'{path}/{run}/metrics/cindex_train').read().split()[1]
+        except:
+            cindex_train = 0.0
+        try: 
+            cindex_test = open(f'{path}/{run}/metrics/cindex_test').read().split()[1]
+        except:
+            cindex_test = 0.0
         try:
             quantile_05 = open(f'{path}/{run}/metrics/quantile_0.5').read().split()[1]
         except:
@@ -114,6 +124,7 @@ def get_mlflow_results(mlflow_id, path=None):
             quantile_075 = open(f'{path}/{run}/metrics/quantile_0.75').read().split()[1]
         except:
             quantile_075 = 0.0
+        
 
 
         frame.loc[i] = [run_name,
@@ -122,6 +133,8 @@ def get_mlflow_results(mlflow_id, path=None):
                         avg_test_loss,
                         avg_val_loss,
                         cindex,
+                        cindex_train,
+                        cindex_test,
                         quantile_05,
                         quantile_025,
                         quantile_075]
