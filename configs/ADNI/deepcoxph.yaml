@@ -1,19 +1,20 @@
 model_params:
     model_name: DeepCoxPH
     structured_params:
-        structured_input_dim: 14
+        structured_input_dim: 19
     deep_params:
         out_dim: 100
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
-        hidden_channels: [16, 32, 64, 128]
+        # hidden_channels: [16, 32, 64, 128]
+        hidden_channels: [32, 64, 128, 256]
         kernel_sizes: [5, 3, 3, 3]
         strides: [2, 2, 2, 2]
         padding: [2, 1, 1, 1]
         bottleneck: True
     wide_deep_params:
-        orthogonalize: True
+        orthogonalize: False
         output_dim: 1
     
 model_hyperparams:
@@ -26,10 +27,15 @@ exp_params:
     data_type: 'coxph'
     simulate: False
     n_dim: 1
-    batch_size: 64
-    learning_rate: 0.024
-    scheduler_gamma: 0.94
-    weight_decay: 0.037
+    batch_size: 128
+    #learning_rate: 0.024
+    #learning_rate: 0.065
+    learning_rate: 0.002
+    #scheduler_gamma: 0.94
+    #scheduler_gamma: null
+    # weight_decay: 0.037
+    #weight_decay: 0.00001
+    weight_decay: 0.000006
     max_epochs: 50
     transforms: True
 
@@ -78,7 +84,7 @@ baseline_params:
 trainer_params:
     gpu: 1
     #max_epochs: 250
-    max_epochs: 100
+    max_epochs: 250
   
 logging_params:
     manual_seed: 1234

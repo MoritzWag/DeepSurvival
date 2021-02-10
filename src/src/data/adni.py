@@ -15,7 +15,9 @@ from sklearn.impute import SimpleImputer
 from src.data.augment import (spatial_transform, 
                               intensity_transform,
                               RicianNoise,
-                              ElasticDeformationsBspline)
+                              ElasticDeformationsBspline,
+                              ImgAugTransform,
+                              ImgTransforms)
 
 
 class ADNI(data.Dataset):
@@ -23,11 +25,32 @@ class ADNI(data.Dataset):
     """
     seed = 1328
     #features_list = ['TAU', 'real_age']
+    # features_list = ['ABETA', 'APOE4', 'AV45',
+    #                  'C(PTGENDER)[T.Male]',
+    #                  'FDG', 'PTAU', 'PTEDUCAT', 
+    #                  'TAU', 'real_age', 'age_male',
+    #                  'bs_1', 'bs_2', 'bs_3', 'bs_4',
+    #                  ]
     features_list = ['ABETA', 'APOE4', 'AV45',
                      'C(PTGENDER)[T.Male]',
                      'FDG', 'PTAU', 'PTEDUCAT', 
                      'TAU', 'real_age', 'age_male',
-                     'bs_1', 'bs_2', 'bs_3', 'bs_4']
+                     'bs_1', 'bs_2', 'bs_3', 'bs_4',
+                     'C(ABETA_MISSING)[T.1]',
+                     'C(TAU_MISSING)[T.1]',
+                     'C(PTAU_MISSING)[T.1]',
+                     'C(FDG_MISSING)[T.1]',
+                     'C(AV45_MISSING)[T.1]'
+                     ]
+
+    # df.loc[df['C(ABETA_MISSING)[T.1]'] == 1.0, 'ABETA'] = np.nan
+    #     df.loc[df['C(TAU_MISSING)[T.1]'] == 1.0, 'TAU'] = np.nan
+    #     df.loc[df['C(PTAU_MISSING)[T.1]'] == 1.0, 'PTAU'] = np.nan
+    #     df.loc[df['C(FDG_MISSING)[T.1]'] == 1.0, 'FDG'] = np.nan
+    #     df.loc[df['C(AV45_MISSING)[T.1]'] == 1.0, 'AV45'] = np.nan
+
+    
+    
 
     mean_survival_time = 20.0
     prob_censored = 0.45
@@ -57,8 +80,11 @@ class ADNI(data.Dataset):
         if self.do_transform:
             if self.trial is None:
                 transforms = []
-                transforms.append(RicianNoise(noise_level=[0, 1]))
-                transforms.append(ElasticDeformationsBspline(num_controlpoints=[1], sigma=[0, 1]))
+                # transforms.append(RicianNoise(noise_level=[0, 10]))
+                # transforms.append(ElasticDeformationsBspline(num_controlpoints=[5], sigma=[0, 2]))
+                #transforms.append(ImgAugTransform())
+                transforms.append(ImgTransforms())
+            
             else:
                 transforms = []
                 transforms.append(RicianNoise(noise_level=[0, 
@@ -93,11 +119,14 @@ class ADNI(data.Dataset):
         return self.df.shape[0]
 
     def __getitem__(self, index):
+        transform = []
+        transform.append(ImgTransforms())
+        transform = torchvision.transforms.Compose(transform)
             
         images = np.load(file=f"{self.final_path}/{self.part}/image_{index}.npy").astype('float64')
-
         if self.do_transform:
-            images = self.transforms(images)
+            #images = self.transforms(images)
+            images = transform(images)
             # images = self.spatial_transform(images)
             # images = self.intensity_transform(images)
         images = torch.tensor(images).to(self.device)
@@ -141,7 +170,10 @@ class ADNI(data.Dataset):
                     continue
                 
                 if self.base_folder == 'adni2d' or self.base_folder == 'adni_sim':
-                    img = img[:, 80, :]
+                    # img.shape = (128, 160, 128)
+                    #img = img[:, 80, :]
+                    img = img[64, :, :]
+                    #img = img[72, :, :]
                 
                 img = np.expand_dims(img, axis=(0))
                 img = minmax_normalize(img)
@@ -180,7 +212,8 @@ class ADNI(data.Dataset):
             # generate interactione effect between age and gender
             df['age_male'] = df['C(PTGENDER)[T.Male]'] * df['real_age']
 
-            df = self.impute_missing_data(df)
+            #df = self.impute_missing_data(df)
+
 
         return df
     

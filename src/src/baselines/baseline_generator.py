@@ -75,7 +75,6 @@ class BaselineGenerator(nn.Module):
     def build_model(self):
         """
         """
-
         # configure discriminator
         self.D = self.discriminator(n_dim=self.d_n_dim, conv_dim=self.d_conv_dim, dimensions=self.d_dimensions)
 

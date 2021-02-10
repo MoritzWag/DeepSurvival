@@ -38,9 +38,9 @@ parser.add_argument('--max_epochs', type=int, default=None,
 
 
 #tuner params
-parser.add_argument('--n_trials', type=int, default=None, metavar='N',
+parser.add_argument('--n_trials', type=int, default=100, metavar='N',
                     help='specifies the number of trials for tuning')
-parser.add_argument('--timeout', type=int, default=54000, metavar='N',
+parser.add_argument('--timeout', type=int, default=None, metavar='N',
                     help="specifies the total seconds used for tuning")
 parser.add_argument('--min_resource', type=int, default=5, metavar='N',
                     help='minimum resource use for each configuration during tuning')
@@ -104,7 +104,7 @@ def objective(trial):
                     check_val_every_n_epoch=1,
                     train_percent_check=1.0,
                     val_percent_check=1.0,
-                    num_sanity_val_steps=5,
+                    num_sanity_val_steps=0,
                     callbacks=[metrics_callback],
                     early_stop_callback=PyTorchLightningPruningCallback(trial, monitor='cindex'),
                     fast_dev_run=False,
@@ -127,9 +127,9 @@ study = optuna.create_study(
 
 if args.n_trials is not None:
     print(f"tune with n_trials: {args.n_trials}")
-    study.optimize(objective, n_trials=args.n_trials, catch=(TypeError, RuntimeError, ))
+    study.optimize(objective, n_trials=args.n_trials, catch=(TypeError, RuntimeError, ValueError, ))
 if args.timeout is not None:
-    study.optimize(objective, timeout=args.timeout, catch=(TypeError, RuntimeError, ))
+    study.optimize(objective, timeout=args.timeout, catch=(TypeError, RuntimeError, ValueError, ))
 
 end = datetime.now()
 diff = end - start 

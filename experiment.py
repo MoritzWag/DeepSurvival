@@ -88,7 +88,6 @@ class DeepSurvExperiment(pl.LightningModule):
         return train_loss
 
     def validation_step(self, batch, batch_idx):
-        
         y_pred = self.forward(**batch)
         if self.params['data_type'] == 'coxph':
             val_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
@@ -214,34 +213,34 @@ class DeepSurvExperiment(pl.LightningModule):
                                               value=value,
                                               run_id=self.logger.run_id)
 
-        # train baseline generator 
-        baseline_generator = BaselineGenerator(discriminator=Discriminator,
-                                               generator=UNet,
-                                               survival_model=self.model,
-                                               data_type=self.params['data_type'],
-                                               c_dim=self.baseline_params['c_dim'],
-                                               img_size=self.baseline_params['img_size'],
-                                               generator_params=self.baseline_params['generator_params'],
-                                               discriminator_params=self.baseline_params['discriminator_params'],
-                                               trainer_params=self.baseline_params['trainer_params'],
-                                               logging_params=self.baseline_params['logging_params'])
+        # # train baseline generator 
+        # baseline_generator = BaselineGenerator(discriminator=Discriminator,
+        #                                        generator=UNet,
+        #                                        survival_model=self.model,
+        #                                        data_type=self.params['data_type'],
+        #                                        c_dim=self.baseline_params['c_dim'],
+        #                                        img_size=self.baseline_params['img_size'],
+        #                                        generator_params=self.baseline_params['generator_params'],
+        #                                        discriminator_params=self.baseline_params['discriminator_params'],
+        #                                        trainer_params=self.baseline_params['trainer_params'],
+        #                                        logging_params=self.baseline_params['logging_params'])
 
-        # train baseline generator
-        train_gen = get_dataloader(root='./data',
-                                   part='train',
-                                   transform=False,
-                                   base_folder=self.params['base_folder'],
-                                   data_type=self.params['data_type'],
-                                   batch_size=self.params['batch_size'])
+        # # train baseline generator
+        # train_gen = get_dataloader(root='./data',
+        #                            part='train',
+        #                            transform=False,
+        #                            base_folder=self.params['base_folder'],
+        #                            data_type=self.params['data_type'],
+        #                            batch_size=self.params['batch_size'])
         
-        val_gen = get_dataloader(root='./data',
-                                 part='val',
-                                 transform=False,
-                                 base_folder=self.params['base_folder'],
-                                 data_type=self.params['data_type'],
-                                 batch_size=self.params['batch_size'])
+        # val_gen = get_dataloader(root='./data',
+        #                          part='val',
+        #                          transform=False,
+        #                          base_folder=self.params['base_folder'],
+        #                          data_type=self.params['data_type'],
+        #                          batch_size=self.params['batch_size'])
 
-        baseline_generator.train(train_gen=train_gen, val_gen=val_gen)
+        # baseline_generator.train(train_gen=train_gen, val_gen=val_gen)
         
         # # validate baseline generator
         # baseline_generator.validate(val_gen=self.val_gen)
@@ -356,8 +355,8 @@ class DeepSurvExperiment(pl.LightningModule):
             optims.append(optimizer)
         else:
             optimizer = optim.Adam(self.model.parameters(),
-                                   lr=self.trial.suggest_loguniform("lr", 1e-5, 1e-1),
-                                   weight_decay=self.trial.suggest_loguniform("weight_decay", 1e-2, 5e-1))
+                                   lr=self.trial.suggest_loguniform("lr", 1e-4, 5e-2),
+                                   weight_decay=self.trial.suggest_loguniform("weight_decay", 0.000001, 0.001))
             optims.append(optimizer)
 
         try:
@@ -369,7 +368,7 @@ class DeepSurvExperiment(pl.LightningModule):
                     return optims, scheds
                 else:
                     scheduler = optim.lr_scheduler.ExponentialLR(optims[0],
-                                                                 gamma=self.trial.suggest_uniform('scheduler_gamma', 0.9, 0.99))
+                                                                 gamma=self.trial.suggest_uniform('scheduler_gamma', 0.99, 0.999))
                     scheds.append(scheduler)
                     return optims, scheds
         except:
@@ -386,7 +385,8 @@ class DeepSurvExperiment(pl.LightningModule):
                               base_folder=self.params['base_folder'],
                               data_type=self.params['data_type'],
                               simulate=self.params['simulate'],
-                              trial=self.trial)
+                              #trial=self.trial
+                              trial=None)
             self.train_gen = DataLoader(dataset=train_data,
                                         batch_size=self.params['batch_size'],
                                         collate_fn=utils.cox_collate_fn,
@@ -449,7 +449,7 @@ class DeepSurvExperiment(pl.LightningModule):
                                     data_type=self.params['data_type'])
                 self.val_gen = DataLoader(dataset=val_data, 
                                     batch_size=self.params['batch_size'],
-                                    collate_fn=utils.ped_collate_fn,
+                                    äcollate_fn=utils.ped_collate_fn,
                                     shuffle=False)
         
         self.eval_data_val = val_data.eval_data

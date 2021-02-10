@@ -108,6 +108,7 @@ class ResidualClassifier(nn.Module):
         self.bottleneck = self.params.get('bottleneck', False)
 
         hidden_channels = self.params.get('hidden_channels', [16, 32, 64, 128])
+
         kernel_sizes = self.params.get('kernel_sizes', [5, 3, 3, 3])
         strides = self.params.get('strides', [2, 2, 2, 2])
         padding = self.params.get('padding', [2, 1, 1, 1])
@@ -161,7 +162,8 @@ class ResidualClassifier(nn.Module):
         self.main = nn.Sequential(*layers)
         
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(in_features=1024, out_features=self.out_dim)
+        # self.linear = nn.Linear(in_features=1024, out_features=self.out_dim)
+        self.linear = nn.Linear(in_features=1280, out_features=self.out_dim)
         self.tanh = nn.Tanh()
 
 
