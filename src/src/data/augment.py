@@ -5,6 +5,7 @@ import random
 import SimpleITK as sitk
 import imgaug as ia
 import pdb
+import torchvision
 
 from torch import Tensor
 from imgaug import augmenters as iaa
@@ -43,63 +44,14 @@ intensity_transform = tio.Compose(
 )
 
 
-class AffineFull:
-    def __init__(self):
-        self.aug = iaa.Sequential([
-            iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric')),
-            iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6))),
-            iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))
-        ])
-    
-    def __call__(self, img):
-        img = np.transpose(img, axes=(1, 2, 0))
-        img = self.aug.augment_image(img)
-        img = np.transpose(img, axes=(2, 0, 1))
-        return img
+data_augmentation = torchvision.transforms.Compose([
+    torchvision.transforms.ToTensor(),
+    #torchvision.transforms.ToPILImage(mode='F'),
+    torchvision.transforms.RandomAffine(degrees=45, translate=(0.1, 0.1), scale=(0.5, 1.2)),
+    torchvision.transforms.ToTensor(),
+    #torchvision.transforms.GaussianBlur(kernel_size=3, sigma=(2.0, 2.0))
+])
 
-
-class Rotate:
-    def __init__(self):
-        self.aug = iaa.Sequential([
-            iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric'))
-        ])
-    
-    def __call__(self, img):
-        img = np.transpose(img, axes=(1, 2, 0))
-        img = self.aug.augment_image(img)
-        img = np.transpose(img, axes=(2, 0, 1))
-        return img
-
-class Shear:
-    def __init__(self):
-        self.aug = iaa.Sequential([
-            iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6)))
-        ])
-    
-    def __call__(self, img):
-        img = np.transpose(img, axes=(1, 2, 0))
-        img = self.aug.augment_image(img)
-        img = np.transpose(img, axes=(2, 0, 1))
-        return img
-
-class Translate:
-    def __init__(self):
-        self.aug = iaa.Sequential([
-            iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))
-        ])
-    
-    def __call__(self, img):
-        img = np.transpose(img, axes=(1, 2, 0))
-        img = self.aug.augment_image(img)
-        img = np.transpose(img, axes=(2, 0, 1))
-        return img 
-
-
-        self.aug = iaa.Sequential([
-            iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric')),
-            iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6))),
-            iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))
-        ])
 
 class ImgTransforms():
     def __init__(self):
@@ -109,15 +61,17 @@ class ImgTransforms():
         if number == 0:
             aug = iaa.Sequential([
                 iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric')),
-                iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6))),
-                iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))
-            ])
+                iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5)),
+                iaa.ScaleX(scale=(0.5, 1.5)),
+                iaa.ScaleY(scale=(0.5, 1.5))])
         elif number == 1:
-            aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric'))])
+            aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(rotate=(-45, 45), mode='symmetric'))])
         elif number == 2:
-            aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))])
+            aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.1))])
         elif number == 3:
-            aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6)))])
+            aug = iaa.Sequential([
+                iaa.ScaleX(scale=(0.5, 1.5)),
+                iaa.ScaleY(scale=(0.5, 1.5))])
 
         self.aug = aug
 
@@ -126,52 +80,6 @@ class ImgTransforms():
         img = self.aug.augment_image(img)
         img = np.transpose(img, axes=(2, 0, 1))
         return img 
-
-# class ImgTransforms():
-#     def __init__(self):
-#         augmentations = []
-#         number = np.random.randint(0, 3)
-        
-#         if number == 0:
-#             augmentations.append(AffineFull())
-#         elif number == 1:
-#             augmentations.append(Rotate())
-#         elif number == 2:
-#             augmentations.append(Translate())
-#         elif number == 3:
-#             augmentations.append(Shear())
-#         pdb.set_trace()
-#         self.aug = iaa.Sequential(*augmentations)
-
-#     def __call__(self, img):
-#         pdb.set_trace()
-#         img = np.transpose(img, axes=(1, 2, 0))
-#         img = self.aug.augment_image(img)
-#         img = np.transpose(img, axes=(2, 0, 1))
-#         return img 
-
-
-class ImgAugTransform:
-    def __init__(self):
-        self.aug = iaa.Sequential([
-            #iaa.Scale((224, 224)),
-            #iaa.Sometimes(0.5, iaa.GaussianBlur(sigma=(0, 3.0))),
-            iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20),mode='symmetric')),
-            iaa.Sometimes(0.5, iaa.Affine(shear=(0.3, 0.6))),
-            iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5))
-
-            #iaa.Horizontal_Flip(0.5)
-            #iaa.TranslateX(px=(-0.1, 0.1))
-        ])
-    
-    def __call__(self, img):
-        #pdb.set_trace()
-        #img = np.array(img)
-        img = np.transpose(img, axes=(1, 2, 0))
-        img = self.aug.augment_image(img)
-        img = np.transpose(img, axes=(2, 0, 1))
-        return img
-        #return self.aug.augment_image(img)
 
 
 class RicianNoise(object):
@@ -214,7 +122,6 @@ class RicianNoise(object):
         else:
             magnitude_image_noisy = image
         return magnitude_image_noisy
-
 
 
 class ElasticDeformationsBspline(object):

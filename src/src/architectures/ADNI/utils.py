@@ -27,8 +27,9 @@ def conv2d_bn_block(in_channels, out_channels, kernel=3, stride=1, padding=1, mo
     '''
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel, stride, padding=padding),
-        nn.BatchNorm2d(out_channels, momentum=momentum),
         activation(),
+        nn.BatchNorm2d(out_channels, momentum=momentum),
+        #activation(),
     )
 
 
@@ -96,70 +97,165 @@ def conv3d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activ
 
 
 class ResidualBlock(nn.Module):
-    """Residual Block architecture.
-    """
+    """Residual block architecture."""
 
-    def __init__(self, in_channels: int, dimensions: int):
+    def __init__(self, in_channels: int):
+        """Initialize module."""
         super(ResidualBlock, self).__init__()
 
-        if dimensions == 2 :
-            conv_block = conv2d_bn_block
-        else:
-            conv_block = conv3d_bn_block
-        
-        self.conv1 = conv_block(in_channels=in_channels,
-                                out_channels=in_channels)
-        self.conv2 = conv_block(in_channels=in_channels,
-                                out_channels=in_channels)
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.conv2 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn2 = nn.BatchNorm2d(in_channels)
 
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
 
     def forward(self, x):
+        """Forward pass."""
         out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
         out = self.conv2(out)
-        
+        out = self.bn2(out)
+
         out += x
         out = self.relu(out)
 
         return out
 
 
-class ResidualBottleneckBlock(nn.Module):
-    """Residual bottleneck block architecture.
-    """
 
-    def __init__(self, in_channels: int, dimensions: int, bottleneck_filters: int = 64):
+# class ResidualBlock(nn.Module):
+#     """Residual Block architecture.
+#     """
+
+#     def __init__(self, in_channels: int, dimensions: int):
+#         super(ResidualBlock, self).__init__()
+
+#         if dimensions == 2 :
+#             conv_block = conv2d_bn_block
+#         else:
+#             conv_block = conv3d_bn_block
+        
+#         self.conv1 = conv_block(in_channels=in_channels,
+#                                 out_channels=in_channels)
+#         self.conv2 = conv_block(in_channels=in_channels,
+#                                 out_channels=in_channels)
+
+#         self.relu = nn.ReLU()
+
+#     def forward(self, x):
+#         out = self.conv1(x)
+#         out = self.conv2(out)
+        
+#         out += x
+#         out = self.relu(out)
+
+#         return out
+
+
+
+class ResidualBottleneckBlock(nn.Module):
+    """Residual bottleneck block architecture."""
+
+    def __init__(self, in_channels: int, bottleneck_filters: int = 64):
+        """Initialize module."""
         super(ResidualBottleneckBlock, self).__init__()
-    
-        if dimensions == 2:
-            conv_block = conv2d_bn_block
-        else:
-            conv_block = conv3d_bn_block
-        
-        self.conv1 = conv_block(in_channels=in_channels,
-                                out_channels=bottleneck_filters,
-                                kernel=1,
-                                padding=0)
-        self.conv2 = conv_block(in_channels=bottleneck_filters,
-                                out_channels=bottleneck_filters,
-                                kernel=3,
-                                padding=1)
-        self.conv3 = conv_block(in_channels=bottleneck_filters,
-                                out_channels=in_channels,
-                                kernel=1,
-                                padding=0)
-        
+
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=bottleneck_filters,
+            kernel_size=1,
+            bias=False,
+        )
+        self.bn1 = nn.BatchNorm2d(bottleneck_filters)
+        self.conv2 = nn.Conv2d(
+            in_channels=bottleneck_filters,
+            out_channels=bottleneck_filters,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn2 = nn.BatchNorm2d(bottleneck_filters)
+        self.conv3 = nn.Conv2d(
+            in_channels=bottleneck_filters,
+            out_channels=in_channels,
+            kernel_size=1,
+            bias=False,
+        )
+        self.bn3 = nn.BatchNorm2d(in_channels)
+
         self.relu = nn.LeakyReLU()
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.conv2(out)
-        out = self.conv3(out)
 
+        """Forward pass."""
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
         out += x
-        out = self.relu(x)
+        out = self.relu(out)
 
         return out
+
+
+
+# class ResidualBottleneckBlock(nn.Module):
+#     """Residual bottleneck block architecture.
+#     """
+
+#     def __init__(self, in_channels: int, dimensions: int, bottleneck_filters: int = 64):
+#         super(ResidualBottleneckBlock, self).__init__()
+    
+#         if dimensions == 2:
+#             conv_block = conv2d_bn_block
+#         else:
+#             conv_block = conv3d_bn_block
+        
+#         self.conv1 = conv_block(in_channels=in_channels,
+#                                 out_channels=bottleneck_filters,
+#                                 kernel=1,
+#                                 padding=0)
+#         self.conv2 = conv_block(in_channels=bottleneck_filters,
+#                                 out_channels=bottleneck_filters,
+#                                 kernel=3,
+#                                 padding=1)
+#         self.conv3 = conv_block(in_channels=bottleneck_filters,
+#                                 out_channels=in_channels,
+#                                 kernel=1,
+#                                 padding=0)
+        
+#         self.relu = nn.LeakyReLU()
+
+#     def forward(self, x):
+#         out = self.conv1(x)
+#         out = self.conv2(out)
+#         out = self.conv3(out)
+
+#         out += x
+#         out = self.relu(x)
+
+#         return out
 
     
 

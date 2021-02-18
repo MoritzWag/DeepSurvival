@@ -20,7 +20,8 @@ def plot_train_progress(history, storage_path):
     plt.figure(figsize=(20, 12))
     for metric in range(num_metrics):
         plt.subplot(num_metrics, 1, metric + 1)
-        plt.plot(history.iloc[20:, metric])
+        # plt.plot(history.iloc[20:, metric])
+        plt.plot(history.iloc[:, metric])
         plt.xlabel('training steps')
         plt.ylabel(history.columns[metric])
 
@@ -54,7 +55,6 @@ def plot_boxplots(df, path, metrics=['cindex',
         fig.savefig(f"{metric}_boxplot.png")
 
 
-
 def get_mlflow_results(mlflow_id, path=None):
 
     if path is None:
@@ -71,11 +71,13 @@ def get_mlflow_results(mlflow_id, path=None):
                                 'cindex',
                                 'cindex_train',
                                 'cindex_test',
-                                'quantile_0.5',
-                                'quantile_0.25',
-                                'quantile_0.75'])
+                                'cindex_tabular',
+                                'quantile_05',
+                                'quantile_025',
+                                'quantile_075'])
 
     i = 0 
+
     for run in runs:
     
         try:
@@ -99,7 +101,6 @@ def get_mlflow_results(mlflow_id, path=None):
             avg_val_loss = open(f'{path}/{run}/metrics/avg_val_loss').read().split()[1]
         except:
             avg_val_loss = 0.0
-
         try: 
             cindex = open(f'{path}/{run}/metrics/cindex').read().split()[1]
         except:
@@ -112,6 +113,10 @@ def get_mlflow_results(mlflow_id, path=None):
             cindex_test = open(f'{path}/{run}/metrics/cindex_test').read().split()[1]
         except:
             cindex_test = 0.0
+        try: 
+            cindex_tabular = open(f'{path}/{run}/metrics/cindex_tabular').read().split()[1]
+        except:
+            cindex_tabular = 0.0
         try:
             quantile_05 = open(f'{path}/{run}/metrics/quantile_0.5').read().split()[1]
         except:
@@ -135,6 +140,7 @@ def get_mlflow_results(mlflow_id, path=None):
                         cindex,
                         cindex_train,
                         cindex_test,
+                        cindex_tabular,
                         quantile_05,
                         quantile_025,
                         quantile_075]

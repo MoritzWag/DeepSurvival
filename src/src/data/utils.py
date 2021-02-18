@@ -103,6 +103,19 @@ def cox_collate_fn(batch, time_index=-1, data_collate=default_collate):
     
 
 
+def safe_normalize(x):
+    """Normalize risk scores to avoid exp underflowing.
+
+    Note that only risk scores relative to each other matter.
+    If minimum risk score is negative, we shift scores so minimum
+    is at zero.
+    """
+
+    x_min, _ = torch.min(x, dim=0)
+    c = torch.zeros(x_min.shape, device=x.device)
+    norm = torch.where(x_min < 0, -x_min, c)
+    return x + norm
+
 def make_riskset(time):
     """Compute mask that represents each sample's risk set.
     Args:

@@ -6,6 +6,7 @@ import pdb
 from experiment import DeepSurvExperiment
 from pytorch_lightning import Trainer 
 from pytorch_lightning.loggers import MLFlowLogger
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from src.helpers import *
 
 import torch.backends.cudnn as cudnn 
@@ -25,7 +26,11 @@ parser.add_argument('--manual_seed', type=int, default=None,
                     help="seed for reproducibility (default: config file)")
 parser.add_argument('--max_epochs', type=int, default=None,
                     help="number of epochs (default: config file")
+parser.add_argument('--split', type=int, default=None,
+                    help="determine which data split to use")
 
+parser.add_argument('--learning_rate', type=float, default=None,
+                    help='learning rate for survival model')
 
 args = parser.parse_args()
 
@@ -51,23 +56,32 @@ np.random.seed(config['logging_params']['manual_seed'])
 cudnn.deterministic = True
 cudnn.benchmark = True 
 
+# determine cv split 
+if args.split is None:
+    split = int(np.random.randint(0, 10, size=1))
+else:
+    split = args.split
+
 # build experiment
 experiment = DeepSurvExperiment(model,
                                 params=config['exp_params'],
                                 log_params=config['logging_params'],
                                 model_hyperparams=config['model_hyperparams'],
                                 baseline_params=config['baseline_params'],
+                                split=split,
+                                model_name=config['model_params']['model_name'],
                                 run_name=args.run_name,
                                 experiment_name=args.experiment_name)
 
 # build trainer 
 runner = Trainer(min_epochs=1,
+                checkpoint_callback=True,
                 logger=mlflow_logger,
-                check_val_every_n_epoch=1,
-                train_percent_check=1.0,
-                val_percent_check=1.0,
+                check_val_every_n_epoch=4,
                 num_sanity_val_steps=5,
-                early_stop_callback=False,
+                # callbacks=[EarlyStopping(monitor='cindex_val', 
+                #                          min_delta=0.005,
+                #                          patience=20, mode='max')],
                 fast_dev_run=False,
                 **config['trainer_params'])
 

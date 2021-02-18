@@ -14,6 +14,7 @@ from lpdn import convert_to_lpdn, convert_layer
 class BaseModel(ABC, Evaluator, Visualizer):
     """
     """
+    
     def __init__(self, **kwargs):
         super(BaseModel, self).__init__(**kwargs)
     

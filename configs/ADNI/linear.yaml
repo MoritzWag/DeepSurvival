@@ -1,24 +1,14 @@
 model_params:
-    model_name: Baseline
+    model_name: Linear
     structured_params:
-        structured_input_dim: 14
-    deep_params:
-        out_dim: 100
-        in_channels: 1
-        dimensions: 2
-        architecture: 'ResidualClassifier'
-        hidden_channels: [16, 32, 64, 128]
-        kernel_sizes: [5, 3, 3, 3]
-        strides: [2, 2, 2, 2]
-        padding: [2, 1, 1, 1]
-        bottleneck: True
+        #structured_input_dim: 1
+        structured_input_dim: 21  
     wide_deep_params:
-        orthogonalize: True
         output_dim: 1
     
 model_hyperparams:
     loss_type: 'cox_ph'
-  
+
 exp_params:
     dataset: 'adni'
     data_path: 'data/coxph/'
@@ -26,9 +16,10 @@ exp_params:
     data_type: 'coxph'
     simulate: False
     n_dim: 1
-    batch_size: 64
-    learning_rate: 0.001
-    scheduler_gamma: 0.95
+    batch_size: 610
+    optimizer: 'SGD'
+    learning_rate: 0.0025
+    #scheduler_gamma: 0.95
     weight_decay: 0
     max_epochs: 50
     transforms: False
@@ -47,7 +38,7 @@ baseline_params:
         conv_dim: 16
         n_dim: 1
     generator_params:
-        learning_rate: 0.001
+        learning_rate: 0.0001
         beta1: 0.5
         beta2: 0.999
         dimensions: 2
@@ -76,9 +67,9 @@ baseline_params:
         run_name: 'wo_map'
 
 trainer_params:
-    gpu: 1
+    #gpu: 1
     #max_epochs: 1
-    max_epochs: 200
+    max_epochs: 2000
   
 logging_params:
     manual_seed: 1234

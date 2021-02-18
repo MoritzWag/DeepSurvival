@@ -1,10 +1,9 @@
 model_params:
-    model_name: DeepCoxPH
+    model_name: Baseline
     structured_params:
-        #structured_input_dim: 1
         structured_input_dim: 21
     deep_params:
-        out_dim: 50
+        out_dim: 90
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
@@ -15,12 +14,12 @@ model_params:
         padding: [2, 1, 1, 1]
         bottleneck: True
     wide_deep_params:
-        orthogonalize: False
+        orthogonalize: True
         output_dim: 1
     
 model_hyperparams:
     loss_type: 'cox_ph'
-  
+
 exp_params:
     dataset: 'adni'
     data_path: 'data/coxph/'
@@ -30,28 +29,21 @@ exp_params:
     n_dim: 1
     batch_size: 128
     optimizer: 'AdamW'
-    #learning_rate: 0.024
-    learning_rate: 0.0000255
-    #learning_rate: 0.0025
-    #learning_rate: 0.00025
-    #learning_rate: 0.0000246
-    #learning_rate: 0.024
-    scheduler_gamma: 0.9965
-    #scheduler_gamma: null
-    # weight_decay: 0.037
-    weight_decay: 19.506
-    #weight_decay: 2
-    #weight_decay: 0.0000001
-    #weight_decay: 0.00098
+    learning_rate: 0.0000914
+    #learning_rate: 0.000098
+    scheduler_gamma: 0.991215
+    # weight_decay: 0.00000136
+    weight_decay: 3.045
     max_epochs: 50
     transforms: True
 
 baseline_params:
     baseline: 'stargan'
+    c_dim: 2
     img_size: 28
     tolerance: 0.5
     discriminator_params:
-        learning_rate: 0.01
+        learning_rate: 0.001
         beta1: 0.5
         beta2: 0.999
         dimensions: 2
@@ -89,7 +81,7 @@ baseline_params:
 
 trainer_params:
     #gpu: 1
-    #max_epochs: 250
+    #max_epochs: 1
     max_epochs: 80
   
 logging_params:

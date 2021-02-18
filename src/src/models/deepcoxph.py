@@ -5,6 +5,7 @@ import numpy as np
 
 from torch import nn
 from src.models.base import BaseModel
+from src.data.utils import safe_normalize
 
 
 class DeepCoxPH(BaseModel):
@@ -43,30 +44,28 @@ class DeepCoxPH(BaseModel):
     def _loss_function(self, event, riskset, predictions):
         """
         """
-
+        predictions = safe_normalize(predictions)
         pred_t = predictions.t()
 
         rr = self.logsumexp_masked(pred_t, riskset, axis=1, keepdim=True)
 
-        losses = torch.multiply(event, rr - predictions)
+        losses = event * (rr - predictions)
         loss = torch.mean(losses)
 
         return loss
 
 
-    def logsumexp_masked(self, risk_scores, mask, axis=0, keepdim=None):
+    def logsumexp_masked(self, riskscores, mask, axis=0, keepdim=True):
         """
         """
-
-        #mask = torch.from_numpy(mask)
         mask = mask.to(self.device)
-        risk_scores_masked = torch.multiply(risk_scores, mask)
-        amax = torch.max(risk_scores_masked, dim=axis, keepdim=True)
-        risk_scores_shift = risk_scores_masked - amax[0]
+        risk_scores_masked = riskscores * mask
+        amax, _ = torch.max(risk_scores_masked, dim=axis, keepdim=True)
+        risk_scores_shift = risk_scores_masked - amax
 
-        exp_masked = torch.multiply(torch.exp(risk_scores_shift), mask)
+        exp_masked = risk_scores_shift.exp() * mask
         exp_sum = torch.sum(exp_masked, axis=axis, keepdim=True)
-        output = amax[0] + torch.log(exp_sum)
+        output = amax + torch.log(exp_sum)
         if not keepdim:
             output = torch.squeeze(output, axis=axis)
         return output
