@@ -104,7 +104,6 @@ class DeepSurvExperiment(pl.LightningModule):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-
         #self.log('avg_train_loss', avg_loss)
         # self.logger.experiment.log_metric(key='avg_train_loss',
         #                                   value=avg_loss,
@@ -414,8 +413,6 @@ class DeepSurvExperiment(pl.LightningModule):
                 print("load weights!")
             else:
                 os.system(f"python run.py --config configs/ADNI/baseline.yaml --experiment_name {self.experiment_name} --run_name {self.run_name}")
-
-            pdb.set_trace()
             os.system(f"python /home/moritz/DeepSurvival/sksurv_trainer.py --download True --seed {self.log_params['manual_seed']} --experiment_name {self.experiment_name} --run_name {self.run_name} --split {self.split}")
             linear_coefficients = np.load(file="/home/moritz/DeepSurvival/linear_weights/weights.npy").astype('float64')
             linear_coefficients = np.expand_dims(linear_coefficients, axis=0)

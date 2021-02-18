@@ -29,7 +29,7 @@ exp_params:
     n_dim: 1
     batch_size: 128
     optimizer: 'AdamW'
-    learning_rate: 0.0000914
+    learning_rate: 0.00914
     #learning_rate: 0.000098
     scheduler_gamma: 0.991215
     # weight_decay: 0.00000136

@@ -56,22 +56,22 @@ data_augmentation = torchvision.transforms.Compose([
 class ImgTransforms():
     def __init__(self):
 
-        number = np.random.randint(0, 4)
+        number = np.random.randint(0, 3)
         
         if number == 0:
             aug = iaa.Sequential([
-                iaa.Sometimes(0.5, iaa.Affine(rotate=(-20, 20), mode='symmetric')),
-                iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.5)),
-                iaa.ScaleX(scale=(0.5, 1.5)),
-                iaa.ScaleY(scale=(0.5, 1.5))])
+                iaa.Sometimes(0.5, iaa.Affine(rotate=(-45, 45), mode='symmetric')),
+                iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.1)),
+                iaa.ScaleX(scale=(0.9, 1.1)),
+                iaa.ScaleY(scale=(0.9, 1.1))])
         elif number == 1:
             aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(rotate=(-45, 45), mode='symmetric'))])
         elif number == 2:
             aug = iaa.Sequential([iaa.Sometimes(0.5, iaa.Affine(translate_percent=0.1))])
         elif number == 3:
             aug = iaa.Sequential([
-                iaa.ScaleX(scale=(0.5, 1.5)),
-                iaa.ScaleY(scale=(0.5, 1.5))])
+                iaa.ScaleX(scale=(0.9, 1.1)),
+                iaa.ScaleY(scale=(0.9, 1.1))])
 
         self.aug = aug
 
