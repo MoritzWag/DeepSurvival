@@ -1,21 +1,20 @@
 model_params:
     model_name: DeepCoxPH
     structured_params:
-        #structured_input_dim: 1
         structured_input_dim: 21
     deep_params:
-        out_dim: 50
+        out_dim: 60
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
-        hidden_channels: [16, 32, 64, 128]
-        #hidden_channels: [32, 64, 128, 256]
+        #hidden_channels: [16, 32, 64, 128]
+        hidden_channels: [32, 64, 128, 256]
         kernel_sizes: [5, 3, 3, 3]
         strides: [2, 2, 2, 2]
         padding: [2, 1, 1, 1]
         bottleneck: True
     wide_deep_params:
-        orthogonalize: False
+        orthogonalize: True
         output_dim: 1
     
 model_hyperparams:
@@ -28,23 +27,16 @@ exp_params:
     data_type: 'coxph'
     simulate: False
     n_dim: 1
-    batch_size: 128
+    batch_size: 256
     optimizer: 'AdamW'
-    #learning_rate: 0.024
-    learning_rate: 0.0000255
-    #learning_rate: 0.0025
-    #learning_rate: 0.00025
-    #learning_rate: 0.0000246
-    #learning_rate: 0.024
-    scheduler_gamma: 0.9965
-    #scheduler_gamma: null
-    # weight_decay: 0.037
-    weight_decay: 19.506
-    #weight_decay: 2
-    #weight_decay: 0.0000001
-    #weight_decay: 0.00098
+    # learning_rate: 3.86e-05
+    # scheduler_gamma: 0.9921
+    # weight_decay: 4.86
+    learning_rate: 0.0001329
+    scheduler_gamma: 0.990049
+    weight_decay: 2.21404
     max_epochs: 50
-    transforms: True
+    transforms: False
 
 baseline_params:
     baseline: 'stargan'
@@ -88,9 +80,8 @@ baseline_params:
         run_name: 'wo_map'
 
 trainer_params:
-    #gpu: 1
-    #max_epochs: 250
-    max_epochs: 80
+    # max_epochs: 10
+    max_epochs: 150
   
 logging_params:
     manual_seed: 1234

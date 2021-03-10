@@ -2,17 +2,17 @@ import torch
 import pdb
 import torch.nn as nn
 
-from src.architectures.ADNI.utils import (ACTIVATION,
-                                          deconv2d_bn_block,
-                                          conv2d_bn_block,
-                                          crop_and_concat,
-                                          conv2d_block,
-                                          conv3d_block,
-                                          conv2d_bn_block,
-                                          Identity)
+from src.architectures.utils import (ACTIVATION,
+                                     deconv2d_bn_block,
+                                     conv2d_bn_block,
+                                     crop_and_concat,
+                                     conv2d_block,
+                                     conv3d_block,
+                                     conv2d_bn_block,
+                                     Identity)
 
 
-class UNet(nn.Module):
+class GeneratorADNI(nn.Module):
     '''
     portings for the models found in the reference reference's official repo
     https://github.com/baumgach/vagan-code
@@ -25,7 +25,7 @@ class UNet(nn.Module):
                  c_dim=2,
                  activation=ACTIVATION,
                  **kwargs):
-        super(UNet, self).__init__()
+        super(GeneratorADNI, self).__init__()
         if dimensions == 2:
             conv_block = conv2d_bn_block if batch_norm else conv2d_block
         else:
@@ -73,30 +73,6 @@ class UNet(nn.Module):
             conv_block(conv_dim, n_dim, activation=Identity),
         )
 
-        # Spatial transformer localization-network
-        self.localization = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=7),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True),
-            nn.Conv2d(8, 10, kernel_size=5),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True),
-            nn.Conv2d(10, 10, kernel_size=5),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(True)
-        )
-
-        # Regressor for the 3 * 2 affine matrix
-        self.fc_loc = nn.Sequential(
-            nn.Linear(10 * 12 * 12, 32),
-            nn.ReLU(True),
-            nn.Linear(32, 3 * 2)
-        )
-
-        # Initialize the weights/bias with identity transformation
-        self.fc_loc[2].weight.data.zero_()
-        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
-
     
     def forward(self, x, c):
         
@@ -119,9 +95,4 @@ class UNet(nn.Module):
         cat1 = crop_and_concat(xu1, x0)
         x7 = self.conv7(cat1)
 
-        xs = self.localization(x7)
-        xs = xs.view(-1, 10 * 12 * 12)
-        theta = self.fc_loc(xs)
-        theta = theta.view(-1, 2, 3)
-
-        return x7, theta                     
+        return x7                

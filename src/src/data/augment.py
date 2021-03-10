@@ -1,47 +1,53 @@
 import torch 
-import torchio as tio 
 import numpy as np 
 import random 
 import SimpleITK as sitk
 import imgaug as ia
 import pdb
 import torchvision
+import torchio as tio
 
 from torch import Tensor
 from imgaug import augmenters as iaa
 
+
+
+# Spatial transforms for all channels
 spatial_transform = tio.Compose(
-        [
-            tio.OneOf(
-                {
-                    tio.RandomAffine(): 0.66, 
-                    tio.RandomElasticDeformation(): 0.33,
-                },
-                p=0.8
-            ),
-            tio.RandomAnisotropy(p=0.25)
-        ]
+    [
+        tio.OneOf(
+            {
+                tio.RandomAffine(): 0.66,
+                tio.RandomElasticDeformation(): 0.33,
+            },
+            p=0.8,
+        ),
+        tio.RandomAnisotropy(p=0.25),
+    ]
 )
 
+# Intensity transforms for image channel
 intensity_transform = tio.Compose(
     [
         tio.OneOf(
             {
-                tio.RandomNoise(): 0.33, 
-                tio.RandomBiasField(): 0.33, 
-                tio.RandomGhosting(): 0.33, 
+                tio.RandomNoise(): 0.33,
+                tio.RandomBiasField(): 0.33,
+                tio.RandomGhosting(): 0.33,
             },
-            p=0.50
+            p=0.50,
         ),
         tio.OneOf(
             {
                 tio.RandomMotion(): 0.5,
                 tio.RandomBlur(): 0.5,
             },
-            p=0.50
-        )
+            p=0.50,
+        ),
     ]
 )
+
+
 
 
 data_augmentation = torchvision.transforms.Compose([

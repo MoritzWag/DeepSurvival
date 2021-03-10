@@ -3,12 +3,11 @@ model_params:
     structured_params:
         structured_input_dim: 2
     deep_params:
-        architecture: 'cnn'
-        architecture_params: 
-            out_dim: 10
-            n_dim: 3
+        architecture: 'Classifier2d'
+        out_dim: 10
+        n_dim: 3
     wide_deep_params:
-        orthogonalize: True
+        orthogonalize: False
         output_dim: 1
     
 model_hyperparams:
@@ -21,21 +20,21 @@ exp_params:
     data_type: 'coxph'
     n_dim: 3
     batch_size: 64
+    optimizer: 'AdamW'
     learning_rate: 0.005
     weight_decay: 0.0
     scheduler_gamma: 0.95
-
 
 baseline_params:
     baseline: 'stargan'
     c_dim: 2
     img_size: 28
-    tolerance: 0.5
     discriminator_params:
         n_dim: 3
-        learning_rate: 0.0001
+        learning_rate: 0.000001
         beta1: 0.5
-        beta2: 0.999
+        beta2: 0.99
+        dimensions: 2
         repeat_num: 3
         conv_dim: 64
     generator_params:
@@ -43,25 +42,31 @@ baseline_params:
         learning_rate: 0.0001
         beta1: 0.5
         beta2: 0.999
+        dimensions: 2
         repeat_num: 6
         conv_dim: 64
     trainer_params:
         n_steps: 5000
         dataset: 'idk'
         n_critic: 5
-        log_step: 250
-        sample_step: 250
+        log_step: 100
+        sample_step: 100
+        tolerance: 0.1
+        alpha: 0.9
         lambda_cls: 1.0
-        lambda_rec: 8.0
-        lambda_gp: 10.0
+        #lambda_rec: 8.0
+        lambda_rec: 200.0
+        lambda_gp: 40.0
+        # lambda_cls: 1.0
+        # lambda_rec: 8.0
+        # lambda_gp: 10.0
     logging_params:
         storage_path: 'sim_copxh_color_target_cls_shapes9'
         run_name: 'sim'
 
 
 trainer_params:
-    gpu: 1
-    max_epochs: 10
+    max_epochs: 20
   
 logging_params:
     manual_seed: 1234

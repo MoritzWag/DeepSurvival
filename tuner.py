@@ -41,9 +41,11 @@ parser.add_argument('--max_epochs', type=int, default=None,
 
 
 #tuner params
+parser.add_argument('--cross_validation', type=bool, default=False, metavar="N",
+                    help="if True, then hyperband with 5-fold cross validation")
 parser.add_argument('--n_trials', type=int, default=None, metavar='N',
                     help='specifies the number of trials for tuning')
-parser.add_argument('--timeout', type=int, default=28800, metavar='N',
+parser.add_argument('--timeout', type=int, default=43200, metavar='N',
                     help="specifies the total seconds used for tuning")
 parser.add_argument('--min_resource', type=int, default=5, metavar='N',
                     help='minimum resource use for each configuration during tuning')
@@ -89,13 +91,9 @@ MODEL_DIR = os.path.join(DIR, "result")
 
 start = datetime.now()
 
-def objective(trial):
+def objective(trial, split):
     """
     """
-
-    # sample split
-    split = int(np.random.randint(0, 10, size=1))
-
     metrics_callback = MetricsCallback(trial=trial)
     
     model = parse_model_config(config)
@@ -108,6 +106,7 @@ def objective(trial):
                                     model_hyperparams=config['model_hyperparams'],
                                     baseline_params=config['baseline_params'],
                                     split=split,
+                                    tune=True,
                                     model_name=config['model_params']['model_name'],
                                     run_name=args.run_name,
                                     experiment_name=args.experiment_name,
@@ -127,6 +126,19 @@ def objective(trial):
 
     return metrics_callback.metrics[-1]['cindex'].item()
 
+
+def objective_cv(trial):
+    """
+    """
+    scores = []
+    for fold in range(5):
+        print("fold number:", fold)
+        c_index = objective(trial=trial, split=fold)
+        scores.append(c_index)
+    return np.mean(scores)
+    
+
+
 n_train_iter = config['trainer_params']['max_epochs']
 study = optuna.create_study(
     direction='maximize',
@@ -138,11 +150,28 @@ study = optuna.create_study(
 )
 
 
-if args.n_trials is not None:
-    print(f"tune with n_trials: {args.n_trials}")
-    study.optimize(objective, n_trials=args.n_trials, catch=(TypeError, RuntimeError, ValueError, ))
-if args.timeout is not None:
-    study.optimize(objective, timeout=args.timeout, catch=(TypeError, RuntimeError, ValueError, ))
+if args.cross_validation:
+    print('hyperband with 5-fold cross validation is executed.')
+    if args.n_trials is not None:
+        print(f"tune with n_trials: {args.n_trials}")
+        study.optimize(objective_cv, 
+                       n_trials=args.n_trials, 
+                       catch=(TypeError, RuntimeError, ValueError, ))
+    if args.timeout is not None:
+        study.optimize(objective_cv, 
+                       timeout=args.timeout, 
+                       catch=(TypeError, RuntimeError, ValueError, ))
+else:
+    if args.n_trials is not None:
+        print(f"tune with n_trials: {args.n_trials}")
+        study.optimize(lambda trial: objective(trial, split=0), 
+                       n_trials=args.n_trials, 
+                       catch=(TypeError, RuntimeError, ValueError, ))
+    if args.timeout is not None:
+        study.optimize(lambda trial: objective(trial, split=0), 
+                       timeout=args.timeout, 
+                       catch=(TypeError, RuntimeError, ValueError, ))
+
 
 end = datetime.now()
 diff = end - start 
@@ -156,9 +185,16 @@ print(best_trial)
 best_params = study.best_params
 print(best_params)
 
+
 # save results in dataframe
 df = study.trials_dataframe()
-df.to_csv(f"hb_{args.run_name}.csv")
+
+
+storage_path = os.path.expanduser("tuning_results")
+if not os.path.exists(storage_path):
+    os.makedirs(storage_path)
+
+df.to_csv(f"{storage_path}/hb_{args.run_name}.csv")
 
 
 # fig_intermediate_values = optuna.visualization.plot_intermediate_values(study)

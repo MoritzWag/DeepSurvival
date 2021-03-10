@@ -7,9 +7,9 @@ from src.evaluator import Evaluator
 from src.visualizer import Visualizer
 from src.dsap.layers.convolution import ProbConv2dInput
 from src.dsap.layers.linear import ProbLinearInput
+from src.data.utils import safe_normalize
 
 from lpdn import convert_to_lpdn, convert_layer
-#torch.set_default_dtype(torch.float64)
 
 class BaseModel(ABC, Evaluator, Visualizer):
     """
@@ -20,58 +20,71 @@ class BaseModel(ABC, Evaluator, Visualizer):
     
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    @abstractmethod
-    def _loss_function(self):
-        pass
-    
-    @abstractmethod
-    def _orthogonalize(self):
-        pass
-    
-    @abstractmethod
-    def _accumulate_batches(self):
-        pass
-    
-    @abstractmethod
-    def predict_on_images(self):
-        pass
-
-    def _orthogonalize(self, structured, unstructured):
-        """orthogonalize unstructured latent representation of unstructured data
-        on structured data
+    def _loss_function(self, event, riskset, predictions):
         """
-        projection_matrix = self.calculate_projection_matrix(structured)
-        unstructured_orthogonalized =  self.orthogonalization(projection_matrix, unstructured)
+        """
+        predictions = safe_normalize(predictions.double())
+        pred_t = predictions.t()
+
+        rr = self.logsumexp_masked(pred_t, riskset, axis=1, keepdim=True)
+
+        losses = event * (rr - predictions)
+        loss = torch.mean(losses)
+
+        return loss
+
+    def logsumexp_masked(self, riskscores, mask, axis=0, keepdim=True):
+        """
+        """
+        mask = mask.to(self.device)
+        risk_scores_masked = riskscores * mask
+        amax, _ = torch.max(risk_scores_masked, dim=axis, keepdim=True)
+        risk_scores_shift = risk_scores_masked - amax
+
+        exp_masked = risk_scores_shift.exp() * mask
+        exp_sum = torch.sum(exp_masked, axis=axis, keepdim=True)
+        output = amax + torch.log(exp_sum)
+        if not keepdim:
+            output = torch.squeeze(output, axis=axis)
+        return output
+
+    def _accumulate_batches(self, data):
+        """
+        """
+        images = []
+        tabular_data = []
+        events = []
+        times = []
+        for batch, data in enumerate(data):
+            image = data['images']
+            tabular_date = data['tabular_data']
+            event = data['event']
+            time = data['time']
+            images.append(image)
+            tabular_data.append(tabular_date)
+            events.append(event)
+            times.append(time)
+
+        images = torch.cat(images)
+        tabular_data = torch.cat(tabular_data)
+        events = torch.cat(events)
+        times = torch.cat(times)
+
+        dict_batches = {'images': images.float(), 'tabular_data': tabular_data,
+                        'event': events, 'time': times}
+
+        return dict_batches
+    
+    def _sample_batch(self, data, num_obs):
+        """
+        """
+        acc_batch = self._accumulate_batches(data=data)
+        indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
         
-        return unstructured_orthogonalized
-    
-    def calculate_projection_matrix(self, matrix):
-        """To calculate the projection matrix of X, the following needs to be 
-        calculated: P = x*(xTx)^-1*xT. This can be achieved by applying the gram schmidt algorithm
-
-        Args:
-            matrix: {torch.Tensor} matrix for which the projection matrix needs to be identified. 
+        for value, key in zip(acc_batch.values(), acc_batch.keys()):
+            acc_batch[key] = value[indeces]
         
-        Returns:
-            projection_matrix: {torch.Tensor} projection matrix
-        """
-        try:
-            Q, R = torch.qr(matrix)
-            xTx_xT = torch.matmul(torch.inverse(R), Q.t())
-            projection_matrix = torch.matmul(matrix, xTx_xT)
-        except:
-            pdb.set_trace()
-
-        return projection_matrix.to(self.device)
-
-    def orthogonalization(self, projection_matrix, feature_matrix):
-        """
-        """
-        num_obs = projection_matrix.shape[0]
-        identity = torch.eye(num_obs).to(self.device)
-        orthogonalized_matrix = identity - projection_matrix
-        orthogonalized_features = torch.matmul(orthogonalized_matrix.float(), feature_matrix.to(self.device))
-        return orthogonalized_features
+        return acc_batch
 
     def _build_lpdn_model(self):
         """

@@ -3,7 +3,7 @@ model_params:
     structured_params:
         structured_input_dim: 21
     deep_params:
-        out_dim: 90
+        out_dim: 10
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
@@ -29,11 +29,12 @@ exp_params:
     n_dim: 1
     batch_size: 128
     optimizer: 'AdamW'
-    learning_rate: 0.00914
-    #learning_rate: 0.000098
-    scheduler_gamma: 0.991215
+    #learning_rate: 0.01
+    learning_rate: 0.0000335
+    scheduler_gamma: 0.99456
     # weight_decay: 0.00000136
-    weight_decay: 3.045
+    #weight_decay: 0.0004
+    weight_decay: 13.13
     max_epochs: 50
     transforms: True
 
@@ -82,7 +83,7 @@ baseline_params:
 trainer_params:
     #gpu: 1
     #max_epochs: 1
-    max_epochs: 80
+    max_epochs: 150
   
 logging_params:
     manual_seed: 1234

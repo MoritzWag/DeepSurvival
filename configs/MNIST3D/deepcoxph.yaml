@@ -3,10 +3,9 @@ model_params:
     structured_params:
         structured_input_dim: 2
     deep_params:
-        architecture: 'cnn3d'
-        architecture_params: 
-            out_dim: 10
-            n_dim: 1
+        architecture: 'Classifier3d'
+        out_dim: 10
+        n_dim: 1
     wide_deep_params:
         orthogonalize: True
         output_dim: 1
@@ -20,6 +19,7 @@ exp_params:
     base_folder: 'mnist3d'
     data_type: 'coxph'
     n_dim: 1
+    optimizer: "AdamW"
     batch_size: 64
     learning_rate: 0.005
     weight_decay: 0.0
@@ -58,7 +58,6 @@ baseline_params:
         run_name: 'mnist3d_000001_lo_inverse'
 
 trainer_params:
-    gpu: 2
     max_epochs: 40
   
 logging_params:

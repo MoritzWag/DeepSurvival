@@ -1,30 +1,25 @@
 
 from src.models.deepcoxph import *
-from src.models.deeppam import * 
 from src.models.baseline import *
-from src.architectures.SIM.cnn import * 
-from src.architectures.SIM.cnn3d import *
-
-from src.architectures.ADNI.classifiers_2D import *
+from src.architectures.SIM.regressors import * 
+from src.architectures.ADNI.regressors import *
 
 
 models = {'DeepCoxPH': DeepCoxPH,
-          'DeepPAM': DeepPAM,
           'Baseline': Baseline,
           'Linear': Linear}
 
-architectures = {'cnn': CNN,
-                'cnn3d': CNN3d,
-                'NN2d': NormalNet2D,
-                'ResidualClassifier': ResidualClassifier,
-                'Classifier': Classifier}
+architectures = {'Classifier3d': Classifier3d,
+                'Classifier2d': Classifier2d,
+                'ResidualClassifier': ResidualClassifier}
+
 
 def parse_architecture_config(config):
     """
     """
     deep_params = config.get('model_params').get('deep_params')
     architecture = architectures[deep_params.get('architecture')]
-    architecture_instance = architecture(deep_params, **deep_params)
+    architecture_instance = architecture(deep_params)
 
     return architecture_instance 
 

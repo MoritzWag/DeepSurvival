@@ -7,7 +7,8 @@ import torch.nn.init as init
 
 
 class Identity(nn.Module):
-
+    def __init__(self, inplace=False):
+        super(Identity, self).__init__()
     def forward(self, x):
         return x
 
@@ -83,7 +84,6 @@ def conv2d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activ
         activation(),
     )
 
-
 def conv3d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activation=ACTIVATION):
     '''
     returns a block 3D conv-activation
@@ -93,26 +93,44 @@ def conv3d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activ
         activation(),
     )
 
-
 def conv2d_intnorm_block(in_channels, out_channels, kernel_size, stride, padding, activation=ACTIVATION, bias=False):
     """
     returns a block 2dconv-InstanceNorm-activation
     """
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias),
+        nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=bias),
         nn.InstanceNorm2d(out_channels, affine=True, track_running_stats=True),
-        activation(),
+        activation(inplace=True),
     )
 
+def conv2d_transposed_intnorm_block(in_channels, out_channels, kernel_size, stride, padding, activation=ACTIVATION, bias=False):
+    """
+    returns a block 3dconvtranpose-InstanceNorm-activation
+    """
+    return nn.Sequential(
+        nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=bias),
+        nn.InstanceNorm2d(out_channels, affine=True, track_running_stats=True),
+        activation(inplace=True)
+    )
+
+def conv3d_transposed_intnorm_block(in_channels, out_channels, kernel_size, stride, padding, activation=ACTIVATION, bias=False):
+    """
+    returns a block 3dconvtranpose-InstanceNorm-activation
+    """
+    return nn.Sequential(
+        nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=bias),
+        nn.InstanceNorm3d(out_channels, affine=True, track_running_stats=True),
+        activation(inplace=True)
+    )
 
 def conv3d_intnorm_block(in_channels, out_channels, kernel_size, stride, padding, activation=ACTIVATION, bias=False):
     """
     returns a block 3dconv-InstanceNorm-activation
     """
     return nn.Sequential(
-        nn.Conv3d(in_channels, out_channels, kernel_size, stride, padding, bias),
+        nn.Conv3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=bias),
         nn.InstanceNorm3d(out_channels, affine=True, track_running_stats=True),
-        activation(),
+        activation(inplace=True),
     )
 
 
@@ -130,7 +148,7 @@ class ResidualBlockInstanceNorm(nn.Module):
         
         self.main = nn.Sequential(
             conv_block(in_channels=dim_in, out_channels=dim_out, kernel_size=3, stride=1, padding=1, bias=False),
-            conv_block(in_channels=dim_out, out_channels=dim_out, kernel_size=3, stride=1, padding=1, activation=None, bias=False)
+            conv_block(in_channels=dim_out, out_channels=dim_out, kernel_size=3, stride=1, padding=1, activation=Identity, bias=False)
         )
        
     def forward(self, x):
@@ -195,7 +213,6 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
 
         return out
-
 
 
 

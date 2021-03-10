@@ -15,7 +15,6 @@ from torchvision.utils import save_image
 from src.data import utils
 from src.data.utils import get_dataloader
 from src.data.adni import ADNI
-from src.data.sim_ped import SimPED
 from src.data.sim_coxph import SimCoxPH
 from src.postprocessing import plot_train_progress
 from src.dsap.dsap import DSAP
@@ -25,12 +24,12 @@ from src.baselines.baseline_generator import BaselineGenerator
 from src.occlusion import Occlusion
 from src.helpers import get_optimizer
 
-from src.architectures.SIM.network2d import Discriminator2d, Generator2d
-from src.architectures.SIM.network3d import Discriminator3d, Generator3d
+from src.architectures.SIM.discriminators import DiscriminatorSIM
+from src.architectures.ADNI.discriminators import DiscriminatorADNI
+from src.architectures.SIM.map_generator import GeneratorSIM
+from src.architectures.ADNI.map_generator import GeneratorADNI
 
-from src.architectures.ADNI.map_generator import UNet
-from src.architectures.ADNI.discriminators import Discriminator
-from src.architectures.ADNI.utils import weight_init
+from src.architectures.utils import weight_init
 
 
 class DeepSurvExperiment(pl.LightningModule):
@@ -43,6 +42,7 @@ class DeepSurvExperiment(pl.LightningModule):
                  model_hyperparams,
                  baseline_params,
                  split,
+                 tune,
                  model_name,
                  run_name,
                  experiment_name,
@@ -51,7 +51,6 @@ class DeepSurvExperiment(pl.LightningModule):
 
         self.new_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        #self.model = model.float().to(self.new_device)
         self.model = model.float()
         self.model.epoch = self.current_epoch
         self.params = params 
@@ -68,23 +67,23 @@ class DeepSurvExperiment(pl.LightningModule):
         self.experiment_name = experiment_name
         self.trial = trial
 
+        # initialize parameters for baseline generation
+        self.discriminator = DiscriminatorADNI if self.params['dataset'] == 'adni' else DiscriminatorSIM
+        self.generator = GeneratorADNI if self.params['dataset'] == 'adni' else GeneratorSIM
+        
         # initialize model
-        self.model = self.weight_init(self.model).to(self.new_device).float()
         self.split = split
-
-    
+        self.tune = tune
+        self.model = self.weight_init(self.model).to(self.new_device).float()
+        
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
 
     def training_step(self, batch, batch_idx):
-
+        #pdb.set_trace()
         y_pred = self.forward(**batch)
-        if self.params['data_type'] == 'coxph':
-            train_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
-            #train_loss = self.model._loss_function(y_pred, time=batch['time'], event=batch['event'])
-        else:
-            train_loss = self.model._loss_function(y_pred, batch['ped_status'])
-        
+        train_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
+
         train_loss = {'loss': train_loss}
 
         train_history = pd.DataFrame([[value.cpu().detach().numpy() for value in train_loss.values()]],
@@ -92,49 +91,17 @@ class DeepSurvExperiment(pl.LightningModule):
 
         self.train_history = self.train_history.append(train_history, ignore_index=True)
 
-        # if self.current_epoch % 10 == 0 and batch_idx == 0:
-        #     self.model.plot_riskscores(riskscores=y_pred,
-        #                                storage_path="train_histograms",
-        #                                run_name=self.run_name,
-        #                                epoch=self.current_epoch)
-
         return train_loss
 
     def train_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-        #self.log('avg_train_loss', avg_loss)
-        # self.logger.experiment.log_metric(key='avg_train_loss',
-        #                                   value=avg_loss,
-        #                                   run_id=self.logger.run_id)
-
-        # # calculate c-index
-        # accumulated_batch_train = self.model._accumulate_batches(data=self.train_gen)
-        # eval_data_train = utils.get_eval_data(batch=accumulated_batch_train, 
-        #                                       model=self.model)
-        # evaluation_data_val = {**accumulated_batch_val, **self.eval_data_train, **eval_data_train}
-
-        
-        # c_index = self.model.concordance_index(event=evaluation_data_train['event'].cpu().detach().numpy().astype(bool),
-        #                                        time=evaluation_data_train['time'].cpu().detach().numpy(),
-        #                                        riskscores=evaluation_data_train['riskscores'])
-
-        # train_cindex = pd.DataFrame([c_index[0]], columns=['cindex'])
-        
-        # self.train_cindex = self.train_cindex.append(train_cindex, ignore_index=True)
-
-        # self.log('cindex_train', c_index[0])
-
         return {'avg_train_loss': avg_loss}
     
     def validation_step(self, batch, batch_idx):
         y_pred = self.forward(**batch)
-        if self.params['data_type'] == 'coxph':
-            val_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
-            #val_loss = self.model._loss_function(y_pred, time=batch['time'], event=batch['event'])
-        else:
-            val_loss = self.model._loss_function(y_pred, batch['ped_status'])
+        val_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
         
         val_loss = {'loss': val_loss}
 
@@ -143,20 +110,6 @@ class DeepSurvExperiment(pl.LightningModule):
         
         self.val_history = self.val_history.append(val_history, ignore_index=True)
 
-        # if self.current_epoch % 10 == 0 and batch_idx == 0:
-        #     self.model.plot_riskscores(riskscores=y_pred,
-        #                                storage_path="val_historgrams",
-        #                                run_name=self.run_name,
-        #                                epoch=self.current_epoch)
-        #     try:
-        #         img_riskscore = self.model.predict_on_images(**batch)
-        #         self.model.plot_riskscores(riskscores=img_riskscore,
-        #                                 storage_path="img_val_hist",
-        #                                 run_name=self.run_name,
-        #                                 epoch=self.current_epoch)
-        #     except:
-        #         pass
-
         return val_loss
 
     def validation_epoch_end(self, outputs):
@@ -164,42 +117,48 @@ class DeepSurvExperiment(pl.LightningModule):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-        self.log('avg_val_loss', avg_loss)
-        self.logger.experiment.log_metric(key='avg_val_loss',
-                                          value=avg_loss,
-                                          run_id=self.logger.run_id)
-
-        # # calculate c-index for tuning!
-        accumulated_batch_val = self.model._accumulate_batches(data=self.val_gen)
-        eval_data_val = utils.get_eval_data(batch=accumulated_batch_val, 
-                                            model=self.model)
-        evaluation_data_val = {**accumulated_batch_val, **self.eval_data_val, **eval_data_val}
-
-        
-        c_index = self.model.concordance_index(event=evaluation_data_val['event'].cpu().detach().numpy().astype(bool),
-                                               time=evaluation_data_val['time'].cpu().detach().numpy(),
-                                               riskscores=evaluation_data_val['riskscores'])
-
-        val_cindex = pd.DataFrame([c_index[0]], columns=['cindex'])
-        
-        self.val_cindex = self.val_cindex.append(val_cindex, ignore_index=True)
-
-        self.log('cindex_val', c_index[0])
-
-        try: 
-            #return {'log': {'avg_loss': avg_loss}}
-            return {'log': {'cindex': c_index[0]}}
+        try:
+            self.logger.experiment.log_metric(key='avg_val_loss',
+                                            value=avg_loss,
+                                            run_id=self.logger.run_id)
         except:
-            return {'avg_loss': avg_loss}
+            pass
+        
+        if self.tune:
+            # calculate c-index for tuning!
+            val_gen, eval_data_val1 = get_dataloader(root='./data',
+                                                    part='val',
+                                                    transform=False,
+                                                    base_folder=self.params['base_folder'],
+                                                    data_type=self.params['data_type'],
+                                                    batch_size=-1,
+                                                    split=self.split)
+
+            accumulated_batch_val = self.model._accumulate_batches(data=val_gen)
+            eval_data_val = utils.get_eval_data(batch=accumulated_batch_val, 
+                                                model=self.model)
+            evaluation_data_val = {**accumulated_batch_val, **eval_data_val1, **eval_data_val}
+
+            c_index = self.model.concordance_index(event=evaluation_data_val['event'].cpu().detach().numpy().astype(bool),
+                                                   time=evaluation_data_val['time'].cpu().detach().numpy(),
+                                                   riskscores=evaluation_data_val['riskscores'])
+
+            val_cindex = pd.DataFrame([c_index[0]], columns=['cindex'])
+            
+            self.val_cindex = self.val_cindex.append(val_cindex, ignore_index=True)
+
+            self.log('cindex_val', c_index[0])
+
+            del accumulated_batch_val, eval_data_val, evaluation_data_val
+
+            return {'log': {'cindex': c_index[0]}}
+
+        return {'avg_loss': avg_loss}
 
     def test_step(self, batch, batch_idx):
 
         y_pred = self.forward(**batch)
-        if self.params['data_type'] == 'coxph':
-            test_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
-            #test_loss = self.model._loss_function(y_pred, time=batch['time'], event=batch['event'])
-        else:
-            test_loss = self.model._loss_function(y_pred, batch['ped_status'])
+        test_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
         
         test_loss = {'loss': test_loss}
 
@@ -218,11 +177,6 @@ class DeepSurvExperiment(pl.LightningModule):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
-        self.log('avg_test_loss', avg_loss)
-        self.logger.experiment.log_metric(key='avg_test_loss',
-                                          value=avg_loss,
-                                          run_id=self.logger.run_id)
-
         try:
             plot_train_progress(self.train_history, 
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/training/")
@@ -230,62 +184,112 @@ class DeepSurvExperiment(pl.LightningModule):
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/validation/")
             plot_train_progress(self.val_cindex, 
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/val_cindex")
-            plot_train_progress(self.train_cindex, 
-                                storage_path=f"logs/{self.run_name}/{self.params['dataset']}/train_cindex")
+            # plot_train_progress(self.train_cindex, 
+            #                     storage_path=f"logs/{self.run_name}/{self.params['dataset']}/train_cindex")
         except:
             pass
         
-        accumulated_batch = self.model._accumulate_batches(data=self.test_gen)
-        accumulated_batch_train = self.model._accumulate_batches(data=self.train_gen)
-        sample_batch = self.model._sample_batch(self.test_gen, num_obs=4)
-        eval_data = utils.get_eval_data(batch=accumulated_batch,
-                                        model=self.model)
-        eval_data_train = utils.get_eval_data(batch=accumulated_batch_train,
-                                              model=self.model)
 
-        # self.model.plot_riskscores(riskscores=eval_data['riskscores'],
-        #                            storage_path='histograms',
-        #                            run_name=self.run_name,
-        #                            epoch=self.params['max_epochs'])
-        # try:
-        #     self.model.plot_riskscores(riskscores=eval_data['riskscore_img'],
-        #                             storage_path='histo_img',
-        #                             run_name=self.run_name,
-        #                             epoch=self.params['max_epochs'])
-        # except:
+        for part in ['train', 'val', 'test']:
+            if self.params['base_folder'] == "adni_slices" and part == 'train':
+                continue 
+
+            data_gen, eval_data1 = get_dataloader(root='./data',
+                                                 part=part,
+                                                 transform=False,
+                                                 base_folder=self.params['base_folder'],
+                                                 data_type=self.params['data_type'],
+                                                 batch_size=-1,
+                                                 split=self.split)
+            accumulated_batch = self.model._accumulate_batches(data=data_gen)
+            eval_data = utils.get_eval_data(batch=accumulated_batch,
+                                            model=self.model)
+            evaluation_data = {**accumulated_batch, **eval_data1, **eval_data}
+            self.model.get_metrics(**evaluation_data, part=part)
+
+            del data_gen, eval_data1, accumulated_batch, eval_data, evaluation_data
+
+
+        # print("EVALUATION!!!!!!")
+        # if self.params['base_folder'] == "adni_slices":
         #     pass
-        
-        evaluation_data = {**accumulated_batch, **self.eval_data, **eval_data}
-        evaluation_data_train = {**accumulated_batch_train, **self.eval_data_train, **eval_data_train}
-       
-        # get survival cindex and ibs
-        # ibs is very slow on MNIST
-        self.model.get_metrics(**evaluation_data, part='test')
-        self.model.get_metrics(**evaluation_data_train, part='train')
-        
-        # # log metrics
-        for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
-            self.log(key, value)
+        # else:
+        #     train_gen, eval_data_train1 = get_dataloader(root='./data',
+        #                                                 part='train',
+        #                                                 transform=False,
+        #                                                 base_folder=self.params['base_folder'],
+        #                                                 data_type=self.params['data_type'],
+        #                                                 batch_size=-1,
+        #                                                 split=self.split)
+        #     accumulated_batch_train = self.model._accumulate_batches(data=train_gen)
+        #     eval_data_train = utils.get_eval_data(batch=accumulated_batch_train,
+        #                                           model=self.model)
+        #     evaluation_data_train = {**accumulated_batch_train, **eval_data_train1, **eval_data_train}
+        #     self.model.get_metrics(**evaluation_data_train, part='train')
 
-        for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
-            self.logger.experiment.log_metric(key=key,
-                                              value=value,
-                                              run_id=self.logger.run_id)
+        #     #del train_gen, eval_data_train1, accumulated_batch_train, eval_data_train, evaluation_data_train
 
-        for _name, _param in zip(self.params.keys(), self.params.values()):
-            self.logger.experiment.log_param(key=_name,
-                                             value=_param,
-                                             run_id=self.logger.run_id)
+
+        # val_gen, eval_data_val1 = get_dataloader(root='./data',
+        #                                         part='val',
+        #                                         transform=False,
+        #                                         base_folder=self.params['base_folder'],
+        #                                         data_type=self.params['data_type'],
+        #                                         batch_size=-1,
+        #                                         split=self.split)
+        # accumulated_batch_val = self.model._accumulate_batches(data=val_gen)
+        # eval_data_val = utils.get_eval_data(batch=accumulated_batch_val,
+        #                                     model=self.model)
+        # evaluation_data_val = {**accumulated_batch_val, **eval_data_val1, **eval_data_val}
+        # self.model.get_metrics(**evaluation_data_val, part='val')
+
+        # #del val_gen, eval_data_val1, accumulated_batch_val, eval_data_val, evaluation_data_val
+
+        # test_gen, eval_data_test1 = get_dataloader(root='./data',
+        #                                             part='test',
+        #                                             transform=False,
+        #                                             base_folder=self.params['base_folder'],
+        #                                             data_type=self.params['data_type'],
+        #                                             batch_size=-1,
+        #                                             split=self.split)        
+        # accumulated_batch_test = self.model._accumulate_batches(data=test_gen)
+        # eval_data_test = utils.get_eval_data(batch=accumulated_batch_test,
+        #                                      model=self.model)
+        # evaluation_data_test = {**accumulated_batch_test, **eval_data_test1, **eval_data_test}
+        # self.model.get_metrics(**evaluation_data_test, part='test')
         
-        self.logger.experiment.log_param(key='run_name',
-                                         value=self.run_name,
-                                         run_id=self.logger.run_id)
-        self.logger.experiment.log_param(key='experiment_name',
-                                         value=self.experiment_name,
-                                         run_id=self.logger.run_id)
-        self.logger.experiment.log_param(key='manual_seed',
-                                         value=self.log_params['manual_seed'],
-                                         run_id=self.logger.run_id)
+        #del test_gen, eval_data_test1, accumulated_batch_test, eval_data_test, evaluation_data_test
+
+        # log metrics
+        try:
+            self.logger.experiment.log_metric(key='avg_test_loss',
+                                            value=avg_loss,
+                                            run_id=self.logger.run_id)
+
+            for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
+                self.log(key, value)
+
+            for key, value in zip(self.model.scores.keys(), self.model.scores.values()):
+                self.logger.experiment.log_metric(key=key,
+                                                value=value,
+                                                run_id=self.logger.run_id)
+
+            for _name, _param in zip(self.params.keys(), self.params.values()):
+                self.logger.experiment.log_param(key=_name,
+                                                value=_param,
+                                                run_id=self.logger.run_id)
+            
+            self.logger.experiment.log_param(key='run_name',
+                                            value=self.run_name,
+                                            run_id=self.logger.run_id)
+            self.logger.experiment.log_param(key='experiment_name',
+                                            value=self.experiment_name,
+                                            run_id=self.logger.run_id)
+            self.logger.experiment.log_param(key='manual_seed',
+                                            value=self.log_params['manual_seed'],
+                                            run_id=self.logger.run_id)
+        except:
+            pass
         
 
         # store model 
@@ -293,44 +297,44 @@ class DeepSurvExperiment(pl.LightningModule):
             torch.save(self.model.deep.state_dict(), "model_weights")
             return {'avg_loss': avg_loss}
 
-        #self.log('cindex_test', self.model.scores['cindex_test'][0])
+        print("BASELINE GENERATOR")
+        train_gen, _ = get_dataloader(root='./data',
+                                      part='train',
+                                      transform=False,
+                                      base_folder=self.params['base_folder'],
+                                      data_type=self.params['data_type'],
+                                      batch_size=self.params['batch_size'],
+                                      split=self.split)
         
-        # # train baseline generator 
-        # baseline_generator = BaselineGenerator(discriminator=Discriminator,
-        #                                        generator=UNet,
-        #                                        survival_model=self.model,
-        #                                        data_type=self.params['data_type'],
-        #                                        c_dim=self.baseline_params['c_dim'],
-        #                                        img_size=self.baseline_params['img_size'],
-        #                                        generator_params=self.baseline_params['generator_params'],
-        #                                        discriminator_params=self.baseline_params['discriminator_params'],
-        #                                        trainer_params=self.baseline_params['trainer_params'],
-        #                                        logging_params=self.baseline_params['logging_params'])
+        val_gen, _ = get_dataloader(root='./data',
+                                    part='val',
+                                    transform=False,
+                                    base_folder=self.params['base_folder'],
+                                    data_type=self.params['data_type'],
+                                    batch_size=self.params['batch_size'],
+                                    split=self.split)
 
-        # # train baseline generator
-        # train_gen = get_dataloader(root='./data',
-        #                            part='train',
-        #                            transform=False,
-        #                            base_folder=self.params['base_folder'],
-        #                            data_type=self.params['data_type'],
-        #                            batch_size=self.params['batch_size'])
-        
-        # val_gen = get_dataloader(root='./data',
-        #                          part='val',
-        #                          transform=False,
-        #                          base_folder=self.params['base_folder'],
-        #                          data_type=self.params['data_type'],
-        #                          batch_size=self.params['batch_size'])
+        # train baseline generator 
+        baseline_generator = BaselineGenerator(discriminator=self.discriminator,
+                                               generator=self.generator,
+                                               survival_model=self.model,
+                                               data_type=self.params['data_type'],
+                                               c_dim=self.baseline_params['c_dim'],
+                                               img_size=self.baseline_params['img_size'],
+                                               generator_params=self.baseline_params['generator_params'],
+                                               discriminator_params=self.baseline_params['discriminator_params'],
+                                               trainer_params=self.baseline_params['trainer_params'],
+                                               logging_params=self.baseline_params['logging_params'])
 
-        # baseline_generator.train(train_gen=train_gen, val_gen=val_gen)
+        baseline_generator.train(train_gen=train_gen, val_gen=val_gen)
+        pdb.set_trace()
+        # validate baseline generator
+        baseline_generator.validate(val_gen=self.val_gen)
         
-        # # validate baseline generator
-        # baseline_generator.validate(val_gen=self.val_gen)
+        baseline_images = baseline_generator.test(batch=accumulated_batch_test)
+        baseline_images = baseline_generator.test(batch=sample_batch)
         
-        # baseline_images = baseline_generator.test(batch=accumulated_batch)
-        # baseline_images = baseline_generator.test(batch=sample_batch)
-        
-        # baseline_images = torch.zeros(sample_batch['images'].shape).to(self.new_device).float()
+        zero_baseline_images = torch.zeros(sample_batch['images'].shape).to(self.new_device).float()
 
         # ##################################################################################################
         # ## derive feature attributions
@@ -398,34 +402,27 @@ class DeepSurvExperiment(pl.LightningModule):
         #                                   run_name=self.run_name)
 
 
-        return {'avg_loss': avg_loss}
+        return {'avg_test_loss': avg_loss}
 
     def weight_init(self, model):
         """
         """
-        if self.model_name == "Baseline":
-            model.apply(weight_init)
-        else:
-            model.apply(weight_init)
-            if os.path.isfile("model_weights"):
-                weights = torch.load("model_weights")
-                model.deep.load_state_dict(weights, strict=False)
-                print("load weights!")
+        # this is not completely right!
+        if self.params['dataset'] == 'adni':
+            if self.model_name == "Baseline":
+                model.apply(weight_init)
             else:
-                os.system(f"python run.py --config configs/ADNI/baseline.yaml --experiment_name {self.experiment_name} --run_name {self.run_name}")
-            os.system(f"python /home/moritz/DeepSurvival/sksurv_trainer.py --download True --seed {self.log_params['manual_seed']} --experiment_name {self.experiment_name} --run_name {self.run_name} --split {self.split}")
-            linear_coefficients = np.load(file="/home/moritz/DeepSurvival/linear_weights/weights.npy").astype('float64')
-            linear_coefficients = np.expand_dims(linear_coefficients, axis=0)
+                model.apply(weight_init)
+                os.system(f"python ./sksurv_train.py --download True --seed {self.log_params['manual_seed']} --experiment_name {self.experiment_name} --run_name {self.run_name} --split {self.split}")
+                linear_coefficients = np.load(file="./linear_weights/weights.npy").astype('float64')
+                linear_coefficients = np.expand_dims(linear_coefficients, axis=0)
 
-        try:
-            model.linear.weight.data[:, :model.structured_input_dim] = nn.Parameter(torch.FloatTensor(linear_coefficients),
-                                                                                    requires_grad=True)
-        except:
-            pass
-  
-        for param in model.parameters():
-            param.requires_grad = True
-        model.train()
+            try:
+                model.linear.weight.data[:, :model.structured_input_dim] = nn.Parameter(torch.FloatTensor(linear_coefficients),
+                                                                                        requires_grad=True)
+
+            except:
+                pass
 
         return model
 
@@ -454,7 +451,7 @@ class DeepSurvExperiment(pl.LightningModule):
         else:
             optimizer = get_optimizer(model=self.model,
                                       lr=self.trial.suggest_loguniform("lr", 1e-5, 2e-2),
-                                      l2_penalty=self.trial.suggest_uniform("weight_decay", 0.0001, 20.0),
+                                      l2_penalty=self.trial.suggest_uniform("weight_decay", 0.00001, 20.0),
                                       optimizer=optim.AdamW)
             optims.append(optimizer)
 
@@ -478,7 +475,7 @@ class DeepSurvExperiment(pl.LightningModule):
         """
 
         if self.params['dataset'] == 'adni':
-            train_data = ADNI(root='/home/moritz/DeepSurvival/data',
+            train_data = ADNI(root='./data',
                               part='train',
                               transform=self.params['transforms'],
                               download=True,
@@ -488,7 +485,7 @@ class DeepSurvExperiment(pl.LightningModule):
                               split=self.split,
                               seed=self.log_params['manual_seed'],
                               trial=None)
-            self.train_gen = DataLoader(dataset=train_data,
+            train_gen = DataLoader(dataset=train_data,
                                         batch_size=self.params['batch_size'],
                                         collate_fn=utils.cox_collate_fn,
                                         shuffle=True)
@@ -499,29 +496,19 @@ class DeepSurvExperiment(pl.LightningModule):
                                       base_folder=self.params['base_folder'],
                                       data_type=self.params['data_type'],
                                       n_dim=self.params['n_dim'])
-                self.train_gen = DataLoader(dataset=train_data,
+                train_gen = DataLoader(dataset=train_data,
                                             batch_size=self.params['batch_size'],
                                             collate_fn=utils.cox_collate_fn,
                                             shuffle=False)
-            else:
-                train_data = SimPED(root='./data',
-                                    part='train',
-                                    base_folder=self.params['base_folder'],
-                                    data_type=self.params['data_type'])
-                self.train_gen = DataLoader(dataset=train_data, 
-                                            batch_size=self.params['batch_size'],
-                                            collate_fn=utils.ped_collate_fn,
-                                            shuffle=False)
-        
-        self.eval_data_train = train_data.eval_data
 
-        return self.train_gen
+        return train_gen
+
 
     def val_dataloader(self):
         """
         """
         if self.params['dataset'] == 'adni':
-            val_data = ADNI(root='/home/moritz/DeepSurvival/data',
+            val_data = ADNI(root='./data',
                              part='val',
                              transform=False,
                              download=True,
@@ -530,9 +517,8 @@ class DeepSurvExperiment(pl.LightningModule):
                              simulate=self.params['simulate'],
                              split=self.split,
                              seed=self.log_params['manual_seed'])
-            self.val_gen = DataLoader(dataset=val_data,
-                                       batch_size=127,
-                                       #batch_size=self.params['batch_size'],
+            val_gen = DataLoader(dataset=val_data,
+                                       batch_size=len(val_data),
                                        collate_fn=utils.cox_collate_fn,
                                        shuffle=False)
         else:
@@ -542,29 +528,18 @@ class DeepSurvExperiment(pl.LightningModule):
                                     base_folder=self.params['base_folder'],
                                     data_type=self.params['data_type'],
                                     n_dim=self.params['n_dim'])
-                self.val_gen = DataLoader(dataset=val_data,
+                val_gen = DataLoader(dataset=val_data,
                                     batch_size=self.params['batch_size'],
                                     collate_fn=utils.cox_collate_fn,
                                     shuffle=False)
-            else:
-                val_data = SimPED(root='./data',
-                                    part='val',
-                                    base_folder=self.params['base_folder'],
-                                    data_type=self.params['data_type'])
-                self.val_gen = DataLoader(dataset=val_data, 
-                                    batch_size=self.params['batch_size'],
-                                    äcollate_fn=utils.ped_collate_fn,
-                                    shuffle=False)
         
-        self.eval_data_val = val_data.eval_data
-        
-        return self.val_gen
+        return val_gen
 
     def test_dataloader(self):
         """
         """
         if self.params['dataset'] == 'adni':
-            test_data = ADNI(root='/home/moritz/DeepSurvival/data',
+            test_data = ADNI(root='./data',
                              part='test',
                              transform=False,
                              download=True,
@@ -573,8 +548,8 @@ class DeepSurvExperiment(pl.LightningModule):
                              simulate=self.params['simulate'],
                              split=self.split,
                              seed=self.log_params['manual_seed'])
-            self.test_gen = DataLoader(dataset=test_data,
-                                       batch_size=self.params['batch_size'],
+            test_gen = DataLoader(dataset=test_data,
+                                       batch_size=len(test_data),
                                        collate_fn=utils.cox_collate_fn,
                                        shuffle=False)
         else:
@@ -584,21 +559,9 @@ class DeepSurvExperiment(pl.LightningModule):
                                     base_folder=self.params['base_folder'],
                                     data_type=self.params['data_type'],
                                     n_dim=self.params['n_dim'])
-                self.test_gen = DataLoader(dataset=test_data,
+                test_gen = DataLoader(dataset=test_data,
                                     batch_size=self.params['batch_size'],
                                     collate_fn=utils.cox_collate_fn,
                                     shuffle=False)
-
-            else:
-                test_data = SimPED(root='./data',
-                                    part='test',
-                                    base_folder=self.params['base_folder'],
-                                    data_type=self.params['data_type'])
-                self.test_gen = DataLoader(dataset=test_data, 
-                                    batch_size=self.params['batch_size'],
-                                    collate_fn=utils.ped_collate_fn,
-                                    shuffle=False)
         
-        self.eval_data = test_data.eval_data
-
-        return self.test_gen
+        return test_gen

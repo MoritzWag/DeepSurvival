@@ -12,7 +12,7 @@ from src.architectures.ADNI.utils import (ACTIVATION,
                                           conv3d_bn_block)
 
 
-class Discriminator(nn.Module):
+class DiscriminatorADNI(nn.Module):
     """
     """
     def __init__(self, 
@@ -23,7 +23,7 @@ class Discriminator(nn.Module):
                  repeat_num=5,
                  activation=ACTIVATION,
                  **kwargs):
-        super(Discriminator, self).__init__()
+        super(DiscriminatorADNI, self).__init__()
 
         if dimensions == 2:
             conv_block = conv2d_bn_block if batch_norm else conv2d_block
@@ -33,9 +33,6 @@ class Discriminator(nn.Module):
         act = activation
 
         self.main = []
-        for num in range(repeat_num):
-            pass
-
 
         self.conv1 = nn.Sequential(
             conv_block(n_dim, conv_dim, activation=act),

@@ -207,13 +207,17 @@ class Visualizer(nn.Module):
         """
         """
         try:
-            rs_origin = rs_origin.detach().cpu().numpy()
-            rs_generated = rs_generated.detach().cpu().numpy()
+            rs_origin = rs_origin.detach().cpu().numpy().squeeze()
+            rs_generated = rs_generated.detach().cpu().numpy().squeeze()
         except:
             pass 
 
         plt.close()
         plt.scatter(x=rs_origin, y=rs_generated)
+        plt.xlabel("Riskscore - Original")
+        plt.ylabel("Riskscore - Generated")
+        plt.ylim(np.min(rs_generated), np.max(rs_generated))
+        plt.xlim(np.min(rs_origin), np.max(rs_origin))
 
         storage_path = os.path.expanduser(storage_path)
         storage_path = f"{storage_path}/{run_name}"

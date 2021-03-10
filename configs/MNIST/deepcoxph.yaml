@@ -3,10 +3,9 @@ model_params:
     structured_params:
         structured_input_dim: 2
     deep_params:
-        architecture: 'cnn'
-        architecture_params: 
-            out_dim: 10
-            n_dim: 1
+        architecture: 'Classifier2d'
+        out_dim: 10
+        n_dim: 1
     wide_deep_params:
         orthogonalize: True
         output_dim: 1
@@ -21,6 +20,7 @@ exp_params:
     data_type: 'coxph'
     n_dim: 1
     batch_size: 64
+    optimizer: 'AdamW'
     learning_rate: 0.005
     weight_decay: 0.0
     scheduler_gamma: 0.95
@@ -58,7 +58,6 @@ baseline_params:
         run_name: 'mnist'
 
 trainer_params:
-    gpu: -1
     max_epochs: 40
   
 logging_params:

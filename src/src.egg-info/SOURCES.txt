@@ -4,6 +4,7 @@ src/dsap_test.py
 src/evaluator.py
 src/helpers.py
 src/integrated_gradients.py
+src/occlusion.py
 src/postprocessing.py
 src/visualizer.py
 src.egg-info/PKG-INFO

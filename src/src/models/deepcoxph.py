@@ -2,6 +2,7 @@
 import torch 
 import pdb
 import numpy as np 
+import math
 
 from torch import nn
 from src.models.base import BaseModel
@@ -41,81 +42,10 @@ class DeepCoxPH(BaseModel):
 
         return riskscore
 
-    def _loss_function(self, event, riskset, predictions):
-        """
-        """
-        predictions = safe_normalize(predictions)
-        pred_t = predictions.t()
-
-        rr = self.logsumexp_masked(pred_t, riskset, axis=1, keepdim=True)
-
-        losses = event * (rr - predictions)
-        loss = torch.mean(losses)
-
-        return loss
-
-
-    def logsumexp_masked(self, riskscores, mask, axis=0, keepdim=True):
-        """
-        """
-        mask = mask.to(self.device)
-        risk_scores_masked = riskscores * mask
-        amax, _ = torch.max(risk_scores_masked, dim=axis, keepdim=True)
-        risk_scores_shift = risk_scores_masked - amax
-
-        exp_masked = risk_scores_shift.exp() * mask
-        exp_sum = torch.sum(exp_masked, axis=axis, keepdim=True)
-        output = amax + torch.log(exp_sum)
-        if not keepdim:
-            output = torch.squeeze(output, axis=axis)
-        return output
-
-    def _accumulate_batches(self, data):
-        """
-        """
-        images = []
-        tabular_data = []
-        events = []
-        times = []
-        for batch, data in enumerate(data):
-            image = data['images']
-            tabular_date = data['tabular_data']
-            # image = data['images'].to(self.device)
-            # tabular_date = data['tabular_data'].to(self.device)
-            event = data['event']
-            time = data['time']
-            # if cuda: 
-            #     image = image.c
-            #     tabular_date = tabular_date.cuda()
-            images.append(image)
-            tabular_data.append(tabular_date)
-            events.append(event)
-            times.append(time)
-
-        images = torch.cat(images)
-        tabular_data = torch.cat(tabular_data)
-        events = torch.cat(events)
-        times = torch.cat(times)
-
-        dict_batches = {'images': images.float(), 'tabular_data': tabular_data,
-                        'event': events, 'time': times}
-
-        return dict_batches
-    
-    def _sample_batch(self, data, num_obs):
-        """
-        """
-        acc_batch = self._accumulate_batches(data=data)
-        indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
-        
-        for value, key in zip(acc_batch.values(), acc_batch.keys()):
-            acc_batch[key] = value[indeces]
-        
-        return acc_batch
-
     def predict_on_images(self, images, tabular_data, **kwargs):
         """
         """
+       
         unstructured = self.deep(images)
         if self.orthogonalize:
             unstructured_orth = self._orthogonalize(tabular_data, unstructured)
@@ -125,5 +55,118 @@ class DeepCoxPH(BaseModel):
         weights = self.linear.weight.data
         unstructured_weights = weights[:, 0:unstructured_orth.shape[1]]
         out = unstructured_orth.matmul(unstructured_weights.t())
-        
+
         return out
+
+    # def calculate_projection_matrix(self, matrix):
+    #     """To calculate the projection matrix of X, the following needs to be 
+    #     calculated: P = x*(xTx)^-1*xT. This can be achieved by applying the gram schmidt algorithm
+
+    #     Args:
+    #         matrix: {torch.Tensor} matrix for which the projection matrix needs to be identified. 
+        
+    #     Returns:
+    #         projection_matrix: {torch.Tensor} projection matrix
+    #     """
+    #     Q, R = torch.qr(matrix)
+    #     xTx_xT = torch.matmul(torch.inverse(R), Q.t())
+    #     projection_matrix = torch.matmul(matrix, xTx_xT)
+
+    #     pdb.set_trace()
+        #return projection_matrix.to(self.device)
+
+    # def calculate_projection_matrix(self, matrix):
+    #     """ H = X(XtX)-1X = QR(RTR)−1RTQT
+    #     """
+    #     pdb.set_trace()
+    #     Q, R = torch.qr(matrix)
+    #     QR = torch.matmul(Q, R)
+    #     RTR_inv = torch.inverse(torch.matmul(R.T, R))
+    #     RTQT = torch.matmul(R.T, Q.T)
+    #     QRRTR = torch.matmul(QR, RTR_inv)
+    #     proj_mat = torch.matmul(QRRTR, RTQT)
+
+    #     return proj_mat
+
+    def calculate_projection_matrix(self, matrix):
+        """
+        """
+        XtX = torch.mm(matrix.t(), matrix)
+        dmat = torch.eye(XtX.shape[0]).to(self.device) * torch.diagonal(XtX)
+        CtC = XtX + dmat * 1e-09
+
+        CtC = self.make_psd(CtC)
+        #pdb.set_trace()
+        
+        R = torch.cholesky(CtC, upper=True)
+
+        # calculate R-TDR-1
+        RinvTD = torch.matmul(torch.inverse(R).T, dmat)
+        RinvTDRinv = torch.matmul(RinvTD, torch.inverse(R))
+
+        # singular value decompostion
+        U, diags, _ = torch.svd(RinvTDRinv)
+
+        # A = CR-1U
+        CR_inv = torch.matmul(matrix, torch.inverse(R))
+        A = torch.matmul(CR_inv, U)
+        AtA = torch.matmul(A.T, A) + 1e-09 * diags
+        AAtA = torch.matmul(A, AtA)
+        pm = torch.matmul(AAtA, A.T)
+
+        return pm 
+        #pdb.set_trace()
+
+
+    
+    # def calculate_projection_matrix(self, matrix):
+    #     """Demmler-Reinsch Orthogonalization 
+    #     (cf. Ruppert er al. 2003, Semiparametric Regression, Appendix B.1.1)
+    #     """
+
+    #     XtX = torch.mm(matrix.t(), matrix)
+    #     dmat = torch.eye(XtX.shape[0]).to(self.device) * torch.diagonal(XtX)
+    #     CtC = XtX + dmat * 1e-09
+
+    #     CtC = self.make_psd(CtC)
+
+    #     pdb.set_trace()
+    #     # Rm = torch.solve(torch.cholesky(A), torch.diag(XtX.dim(1)))
+    #     chol = torch.cholesky(A)
+    #     eye = torch.eye(XtX.shape[1]).to(self.device)
+    #     Rm, _ = torch.solve(chol, eye)
+    #     #Rm = torch.solve(torch.cholesky(A), torch.eye(XtX.shape[1]).to(self.device))
+    #     dec = torch.svd(torch.matmul(torch.mm(Rm, dmat), Rm))
+
+
+    def make_psd(self, x):
+        """
+        """
+
+        lamb = torch.min(torch.eig(x)[0])
+        lamb = lamb - math.sqrt(1e-9)
+        # if smallest eigenvalue is negative => not semipositive definite
+        if lamb < -1e-10:
+            rho = 1 / (1 - lamb)
+            x = rho * x + (1 - rho) * torch.eye(x.shape[0]).to(self.device)
+            
+        return x
+
+    def orthogonalization(self, projection_matrix, feature_matrix):
+        """
+        """
+        num_obs = projection_matrix.shape[0]
+        identity = torch.eye(num_obs).to(self.device)
+        orthogonalized_matrix = identity - projection_matrix
+        orthogonalized_features = torch.matmul(orthogonalized_matrix.float(), feature_matrix.to(self.device))
+        return orthogonalized_features
+    
+
+    def _orthogonalize(self, structured, unstructured):
+        """orthogonalize unstructured latent representation of unstructured data
+        on structured data
+        """
+        projection_matrix = self.calculate_projection_matrix(structured)
+        unstructured_orthogonalized =  self.orthogonalization(projection_matrix, unstructured)
+        
+        return unstructured_orthogonalized

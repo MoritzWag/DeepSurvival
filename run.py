@@ -69,6 +69,7 @@ experiment = DeepSurvExperiment(model,
                                 model_hyperparams=config['model_hyperparams'],
                                 baseline_params=config['baseline_params'],
                                 split=split,
+                                tune=False,
                                 model_name=config['model_params']['model_name'],
                                 run_name=args.run_name,
                                 experiment_name=args.experiment_name)
@@ -79,9 +80,6 @@ runner = Trainer(min_epochs=1,
                 logger=mlflow_logger,
                 check_val_every_n_epoch=1,
                 num_sanity_val_steps=5,
-                # callbacks=[EarlyStopping(monitor='cindex_val', 
-                #                          min_delta=0.005,
-                #                          patience=20, mode='max')],
                 fast_dev_run=False,
                 **config['trainer_params'])
 

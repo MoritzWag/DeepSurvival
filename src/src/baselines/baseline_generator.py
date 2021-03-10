@@ -63,7 +63,7 @@ class BaselineGenerator(nn.Module):
         self.g_conv_dim = generator_params['conv_dim']
         self.g_n_dim = generator_params['n_dim']
         self.g_dimensions = discriminator_params['dimensions']
-
+        
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.build_model()
@@ -71,15 +71,20 @@ class BaselineGenerator(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
     
-
     def build_model(self):
         """
         """
         # configure discriminator
-        self.D = self.discriminator(n_dim=self.d_n_dim, conv_dim=self.d_conv_dim, dimensions=self.d_dimensions)
+        self.D = self.discriminator(n_dim=self.d_n_dim, 
+                                    conv_dim=self.d_conv_dim, 
+                                    dimensions=self.d_dimensions,
+                                    repeat_num=self.d_repeat_num)
 
         # configure generator
-        self.G = self.generator(n_dim=self.g_n_dim, conv_dim=self.g_conv_dim, dimensions=self.g_dimensions)
+        self.G = self.generator(n_dim=self.g_n_dim, 
+                                conv_dim=self.g_conv_dim, 
+                                dimensions=self.g_dimensions,
+                                repeat_num=self.g_repeat_num)
 
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.d_beta1, self.d_beta2])
         self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.g_lr, [self.g_beta1, self.g_beta2])
@@ -118,8 +123,10 @@ class BaselineGenerator(nn.Module):
             except:
                 train_gen_iter = iter(train_gen)
                 batch = next(train_gen_iter)
-            images = batch[0].float().to(self.device)
-            tabular_data = batch[1].float().to(self.device)
+            images = batch['images'].float().to(self.device)
+            #images.requires_grad = True
+            tabular_data = batch['tabular_data'].float().to(self.device)
+            #tabular_data.requires_grad = True
 
             # derive labels for batch
             label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
@@ -139,19 +146,17 @@ class BaselineGenerator(nn.Module):
             d_loss_real =  - torch.mean(out_src)
 
             # Compute loss with fake images
-            x_mask, theta = self.G(images, label_target.float())
+            x_mask = self.G(images, label_target.float())
             output_mask = x_mask
-            x_fake = images + output_mask
-            x_fake = self.tanh(x_fake)
-
-            if self.trainer_params['st']:
-                x_fake = self.spatial_transforms(x_fake, theta)
+            #x_fake = images + output_mask
+            x_fake = x_mask
+            # x_fake = self.tanh(x_fake)
 
 
             out_src = self.D(x_fake)
             d_loss_fake = torch.mean(out_src)
             #out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
-            out_domain = self.survival_model(tabular_data, x_fake)
+            #out_domain = self.survival_model(tabular_data, x_fake)
 
             # Compute loss for gradient penalty
             if images.ndim == 5:
@@ -182,43 +187,37 @@ class BaselineGenerator(nn.Module):
 
             if (step + 1) % self.trainer_params['n_critic'] == 0:
                 # Original-to-target domain 
-                x_mask, theta = self.G(images, label_target.float())
+                x_mask = self.G(images, label_target.float())
                 output_mask = x_mask
-                x_fake = images + output_mask
-                x_fake = self.tanh(x_fake)
-
-                x_fake = self.spatial_transforms(x_fake, theta)
+                #x_fake = images + output_mask
+                x_fake = x_mask
+                # x_fake = self.tanh(x_fake)
 
                 out_src = self.D(x_fake)
-                out_domain = self.survival_model(tabular_data, x_fake)
-                #out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
+                #out_domain = self.survival_model(tabular_data, x_fake)
+                out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
                 g_loss_fake = - torch.mean(out_src)
-                g_loss_cls = self.domain_loss(out_domain, label_target)
+                g_loss_cls = self.domain_loss(out_domain, label_target, alpha= self.trainer_params['alpha'], tolerance=self.trainer_params['tolerance'],)
 
                 # Target-to-original domain
 
-                x_mask_recon, theta = self.G(x_fake, label_origin)
+                x_mask_recon = self.G(x_fake, label_origin)
                 output_mask_recon = x_mask_recon
-                x_reconstruct = x_fake + output_mask_recon
-                x_reconstruct = self.tanh(x_reconstruct)
-
-                if self.trainer_params['st']:
-                    x_reconstruct = self.spatial_transforms(x_reconstruct, theta)
+                #x_reconstruct = x_fake + output_mask_recon
+                x_reconstruct = x_mask_recon
+                # x_reconstruct = self.tanh(x_reconstruct)
 
                 g_loss_rec = self.reconstruction_loss(images, x_reconstruct)
 
-                map_loss = torch.abs(x_mask).mean()
+                # map_loss = torch.abs(x_mask).mean()
                 
 
                 # Backward and optimize
                 # + 0.0001 * map_loss
                 g_loss = g_loss_fake + self.trainer_params['lambda_rec'] * g_loss_rec \
-                        + self.trainer_params['lambda_cls'] * g_loss_cls \
-                        + self.trainer_params['lambda_map'] * map_loss \
+                        + self.trainer_params['lambda_cls'] * g_loss_cls 
+                        # + self.trainer_params['lambda_map'] * map_loss \
                     
-                if self.trainer_params['st']:
-                    tv_loss = self.total_variation_loss(x_fake)
-                    g_loss += self.trainer_params['lambda_tv'] * tv_loss
 
                 self.reset_grad()
                 g_loss.backward()
@@ -228,10 +227,7 @@ class BaselineGenerator(nn.Module):
                 loss['G/loss_fake'] = g_loss_fake.item()
                 loss['G/loss_rec'] = g_loss_rec.item()
                 loss['G/loss_cls'] = g_loss_cls.item()
-                loss['G/loss_norm'] = map_loss.item()
-
-                if self.trainer_params['st']:
-                    loss['G/loss_tv'] = tv_loss.item()
+                #loss['G/loss_norm'] = map_loss.item()
 
                 train_history = pd.DataFrame([[value for value in loss.values()]],
                                                     columns=[key for key in loss.keys()])
@@ -263,9 +259,8 @@ class BaselineGenerator(nn.Module):
         except:
             val_gen_iter = iter(val_gen)
             batch = next(val_gen_iter)
-        images = batch[0].float().to(self.device)
-        tabular_data = batch[1].float().to(self.device)
-
+        images = batch['images'].float().to(self.device)
+        tabular_data = batch['tabular_data'].float().to(self.device)
         # derive labels for batch
         label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
         
@@ -274,20 +269,18 @@ class BaselineGenerator(nn.Module):
         label_origin = label_origin.to(self.device)
 
         with torch.no_grad():
-            x_mask, theta = self.G(images, label_target.float())
-            x_generated = images + x_mask
-            x_generated = self.tanh(x_generated)
-
-            if self.trainer_params['st']:
-                x_generated = self.spatial_transforms(x_generated, theta)
+            x_mask = self.G(images, label_target.float())
+            #x_generated = images + x_mask
+            x_generated = x_mask
+            #x_generated = self.tanh(x_generated)
 
             # derive predicted riskscores for original and generated images
-            #rs_origin = self.survival_model.predict_on_images(images, tabular_data)
-            rs_origin = self.survival_model(tabular_data, images)
+            rs_origin = self.survival_model.predict_on_images(images, tabular_data)
+            #rs_origin = self.survival_model(tabular_data, images)
 
-            #rs_generated = self.survival_model.predict_on_images(x_generated, tabular_data)
-            rs_generated = self.survival_model(tabular_data, x_generated)
-
+            rs_generated = self.survival_model.predict_on_images(x_generated, tabular_data)
+            #rs_generated = self.survival_model(tabular_data, x_generated)
+            
             self.survival_model.plot_gen_origin_rs(rs_origin=rs_origin,
                                                     rs_generated=rs_generated,
                                                     storage_path=self.logging_params['storage_path'],
@@ -302,7 +295,7 @@ class BaselineGenerator(nn.Module):
             rs_origin = rs_origin[samples]
             rs_generated = rs_generated[samples]
 
-            # self.survival_model.plot_riskscores(riskscore=rs_origin,
+            # self.survival_model.plot_riskscores(riskscores=rs_origin,
             #                                     storage_path=self.logging_params['storage_path'],
             #                                     run_name=self.logging_params['run_name'],
             #                                     epoch=step)
@@ -368,10 +361,11 @@ class BaselineGenerator(nn.Module):
         """
         return nn.BCELoss(pred, true)
 
-
+    #alpha = 0.9
     def domain_loss(self, preds, target_label, alpha=0.9, tolerance=0.25):
         """Adaptive quantile loss.
         """
+
         errors = torch.zeros(size=preds.shape)
         losses = []
         for idx in range(preds.shape[0]):
@@ -400,38 +394,19 @@ class BaselineGenerator(nn.Module):
         """Cyclic reconstruction loss between reconstructed 
         to original domain from generated images from target domain.
         """
-
         loss = torch.mean(torch.abs(x_real - x_reconstruct))
-        # loss_func = nn.BCELoss(reduction='mean')
-        # loss = loss_func(x_reconstruct, x_real)
-
         return loss
-
-    def total_variation_loss(self, x):
-        """
-        """
-
-
-        # pixel_dif1 = images[:, 1:, :, :] - images[:, :-1, :, :]
-        # pixel_dif2 = images[:, :, 1:, :] - images[:, :, :-1, :]
-        pixel_dif1 = x[:, :, 1:, :] - x[:, :, :-1, :]
-        pixel_dif2 = x[:, :, :, 1:] - x[:, :, :, :-1]
-
-        tot_var = torch.mean(torch.abs(pixel_dif1)) + torch.mean(torch.abs(pixel_dif2))
-
-        if torch.isnan(tot_var):
-            pdb.set_trace()
-        return tot_var
 
 
     def generate_labels(self, images, tabular_data):
         """
         """
-        #prediction = self.survival_model.predict_on_images(images=images, tabular_data=tabular_data)
-        prediction = self.survival_model(tabular_data, images)
-        log_prediction = prediction.squeeze(1)
-        #log_prediction = torch.log(prediction).squeeze(1)
-        
+        prediction = self.survival_model.predict_on_images(images=images, tabular_data=tabular_data)
+        log_prediction = prediction
+        # try:
+        #     log_prediction = torch.log(prediction).squeeze(1)
+        # except:
+        #     pdb.set_trace()
         label_target = torch.zeros(size=(log_prediction.shape[0], 2))
         label_origin = torch.zeros(size=(log_prediction.shape[0], 2))
         for idx in range(label_target.shape[0]):
@@ -444,15 +419,6 @@ class BaselineGenerator(nn.Module):
     
         return label_target.float(), label_origin.float()
 
-    def spatial_transforms(self, x, theta):
-        """
-        """
-        
-        grid = F.affine_grid(theta, x.size())
-        x = F.grid_sample(x, grid)
-
-        return x
-        
     def visualize_results(self, 
                           x_origin, 
                           x_generated,

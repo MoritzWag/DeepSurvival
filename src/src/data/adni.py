@@ -12,17 +12,17 @@ from torch.utils import data
 from torchvision.utils import save_image
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from patsy.contrasts import Poly
 from torchvision import transforms
 
 
-from src.data.augment import (spatial_transform, 
-                              intensity_transform,
-                              RicianNoise,
+from src.data.augment import (RicianNoise,
                               ElasticDeformationsBspline,
                               ImgTransforms, 
-                              data_augmentation)
+                              data_augmentation,
+                              spatial_transform,
+                              intensity_transform)
 
 
 to_pil = transforms.ToPILImage()
@@ -31,7 +31,7 @@ to_tensor = transforms.ToTensor()
 class ADNI(data.Dataset):
     """
     """
-    num_cvsplits = 10
+    num_cvsplits = 5
     features_list = ['ABETA', 'APOE4', 'AV45',
                      'C(PTGENDER)[T.Male]',
                      'FDG', 'PTAU', 
@@ -73,6 +73,8 @@ class ADNI(data.Dataset):
         self.do_transform = transform
         #self.img_transform = data_augmentation
         self.img_transform = ImgTransforms()
+        self.spatial_transform = spatial_transform
+        self.intensity_transform = intensity_transform
         self.p_aug = 0.5
         
         if self.part == 'val':
@@ -100,11 +102,20 @@ class ADNI(data.Dataset):
         else:
             images = np.load(file=f"{self.final_path}/{self.part}/image_{index}.npy").astype('float64')
         if self.do_transform:
-            if np.random.rand() < self.p_aug:
-                images = self.img_transform(images)
-                images = torch.from_numpy(images).to(self.device)
+            if self.base_folder == "adni2d":
+                if np.random.rand() < self.p_aug:
+                    images = self.img_transform(images)
+                    images = torch.from_numpy(images).to(self.device)
+                else:
+                    images = torch.from_numpy(images).to(self.device)
             else:
-                images = torch.from_numpy(images).to(self.device)
+                images = torch.from_numpy(images)
+                #images = self.spatial_transform(images)
+                images[0] = self.intensity_transform(images[0].unsqueeze(0)).squeeze(0)
+                images[images < 0] = 0
+                images[images > 1] = 1
+                images = images.to(self.device)
+                #images = self.intensity_transform(images).to(self.device)
         else:
             images = torch.from_numpy(images).to(self.device)
 
@@ -116,8 +127,9 @@ class ADNI(data.Dataset):
         return images, tabular_data, event, time
 
     def download(self):
+        #pdb.set_trace()
         if not os.path.exists(self.final_path):
-            os.mkdir(self.final_path)
+            os.makedirs(self.final_path)
         else:
             return
         
@@ -140,7 +152,7 @@ class ADNI(data.Dataset):
         images = []
 
         with h5py.File(file_val, mode='r') as fin:
-            columns = [x for x in fin['stats']['tabular']['columns']]
+            columns = [x.decode('utf-8') for x in fin['stats']['tabular']['columns']]
             idx_val = 0
             for i, (image_id, grp) in enumerate(fin.items()):
                 try:
@@ -149,14 +161,23 @@ class ADNI(data.Dataset):
                     continue
 
                 if self.base_folder == 'adni2d' or self.base_folder == 'adni_sim':
-                    # img = img[64, :, :]
                     img = img[87, :, :]
+                if self.base_folder == "adni_slices":
+                    img = img[70:95, :, :]
 
-                
                 img = np.expand_dims(img, axis=(0))
-                img = minmax_normalize(img, lower_bound=0.0, upper_bound=255.0)
+                img = minmax_normalize(img)
                 img = torch.from_numpy(img)
-                img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
+
+                if self.base_folder == 'adni_slices':
+                    img_rotated = []
+                    for channel in range(img.shape[1]):
+                        arr = img[:, channel, :, :]
+                        arr = to_tensor(torchvision.transforms.functional.rotate(to_pil(arr), 90)).numpy()
+                        img_rotated.append(arr)
+                    img = np.stack(img_rotated, axis=1)
+                else:
+                    img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
 
                 is_event, observed_time = grp.attrs['event'], grp.attrs['time']
 
@@ -177,7 +198,7 @@ class ADNI(data.Dataset):
         file_train = f"/home/moritz/adni/0-train.h5"
         idx_train = 0
         with h5py.File(file_train, mode='r') as fin:
-            columns = [x for x in fin['stats']['tabular']['columns']]
+            columns = [x.decode('utf-8') for x in fin['stats']['tabular']['columns']]
             idx = 0
             for i, (image_id, grp) in enumerate(fin.items()):
 
@@ -187,15 +208,24 @@ class ADNI(data.Dataset):
                     continue 
 
                 if self.base_folder == 'adni2d' or self.base_folder == 'adni_sim':
-                    # img = img[64, :, :]
                     img = img[87, :, :]
-
+                if self.base_folder == "adni_slices":
+                    img = img[70:95, :, :]
 
                 img = np.expand_dims(img, axis=(0))
-                img = minmax_normalize(img, lower_bound=0.0, upper_bound=255.0)
+                img = minmax_normalize(img)
                 img = torch.from_numpy(img)
                 #to_pil = transforms.ToPILImage()
-                img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
+
+                if self.base_folder == 'adni_slices':
+                    img_rotated = []
+                    for channel in range(img.shape[1]):
+                        arr = img[:, channel, :, :]
+                        arr = to_tensor(torchvision.transforms.functional.rotate(to_pil(arr), 90)).numpy()
+                        img_rotated.append(arr)
+                    img = np.stack(img_rotated, axis=1)
+                else:
+                    img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
 
                 is_event, observed_time = grp.attrs['event'], grp.attrs['time']
 
@@ -215,7 +245,7 @@ class ADNI(data.Dataset):
         df_test = pd.DataFrame()
         file_test = f"/home/moritz/adni/0-test.h5"
         with h5py.File(file_test, mode='r') as fin:
-            columns = [x for x in fin['stats']['tabular']['columns']]
+            columns = [x.decode('utf-8') for x in fin['stats']['tabular']['columns']]
             idx_test = 0
             for i, (image_id, grp) in enumerate(fin.items()):
 
@@ -225,13 +255,23 @@ class ADNI(data.Dataset):
                     continue 
 
                 if self.base_folder == 'adni2d' or self.base_folder == 'adni_sim':
-                    # img = img[64, :, :]
                     img = img[87, :, :]
-                
+                if self.base_folder == "adni_slices":
+                    img = img[70:95, :, :]
+
                 img = np.expand_dims(img, axis=(0))
-                img = minmax_normalize(img, lower_bound=0.0, upper_bound=255.0)
+                img = minmax_normalize(img)
                 img = torch.from_numpy(img)
-                img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
+
+                if self.base_folder == 'adni_slices':
+                    img_rotated = []
+                    for channel in range(img.shape[1]):
+                        arr = img[:, channel, :, :]
+                        arr = to_tensor(torchvision.transforms.functional.rotate(to_pil(arr), 90)).numpy()
+                        img_rotated.append(arr)
+                    img = np.stack(img_rotated, axis=1)
+                else:
+                    img = to_tensor(torchvision.transforms.functional.rotate(to_pil(img), 90)).numpy()
 
                 is_event, observed_time = grp.attrs['event'], grp.attrs['time']
 
@@ -244,7 +284,11 @@ class ADNI(data.Dataset):
                 idx_test += 1
 
 
-        images = np.stack(images)
+        if self.base_folder == "adni_slices":
+            images = np.stack(images)
+            #images = np.squeeze(images)
+        else: 
+            images = np.stack(images).sque
         # merge train, val and test df 
         df = pd.concat([df_val, df_train, df_test]).reset_index(drop=True)
 
@@ -252,12 +296,9 @@ class ADNI(data.Dataset):
             observed_time, is_event = self.generate_survival_times(age=df['real_age'].to_numpy())
             df['event'] = is_event.astype('int')
             df['time'] = observed_time
-        else:
-            pass
 
         # one-hot encode event "no" = 0, "yes" = 1
         df['event'] = df['event'].replace({'no': 0, 'yes': 1})
-
         # include b-splines expansion of degree 4
         real_age = {'real_age': df['real_age']}
         bs = patsy.dmatrix("bs(real_age, df=4)", real_age)
@@ -315,11 +356,14 @@ class ADNI(data.Dataset):
 
 
         indeces = np.arange(X_train.shape[0])
-        kf = KFold(n_splits=self.num_cvsplits)
-        kf.get_n_splits(indeces)
+        # kf = KFold(n_splits=self.num_cvsplits)
+        # kf.get_n_splits(indeces)
+        #pdb.set_trace()
+        kf = StratifiedKFold(n_splits=self.num_cvsplits)
+        kf.get_n_splits(df_train, y=df_train['event'])
 
         split = 0
-        for train_index, val_index in kf.split(indeces):
+        for train_index, val_index in kf.split(df_train, y=df_train['event']):
 
             x_train, df_t = X_train[train_index], df_train.iloc[train_index, :]
             x_val, df_v = X_train[val_index], df_train.iloc[val_index, :]
