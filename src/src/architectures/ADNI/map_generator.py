@@ -72,7 +72,6 @@ class GeneratorADNI(nn.Module):
             conv_block(2*conv_dim, conv_dim, activation=act),
             conv_block(conv_dim, n_dim, activation=Identity),
         )
-
     
     def forward(self, x, c):
         

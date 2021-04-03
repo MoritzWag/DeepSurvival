@@ -51,7 +51,7 @@ class ProbConv2dInput(Conv2d):
 
         # 1.) apply mask complement => mask_comp
         mask_comp = input_ * (torch.ones_like(mask) - mask)
-
+        pdb.set_trace()
         # 2.) inputs_i = mask_comp + baseline * mask
         inputs_i = mask_comp + baselines * mask
 

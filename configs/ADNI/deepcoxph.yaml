@@ -7,7 +7,6 @@ model_params:
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
-        #hidden_channels: [16, 32, 64, 128]
         hidden_channels: [32, 64, 128, 256]
         kernel_sizes: [5, 3, 3, 3]
         strides: [2, 2, 2, 2]
@@ -40,10 +39,10 @@ exp_params:
 
 baseline_params:
     baseline: 'stargan'
+    c_dim: 2
     img_size: 28
-    tolerance: 0.5
     discriminator_params:
-        learning_rate: 0.01
+        lr_d: 0.01
         beta1: 0.5
         beta2: 0.999
         dimensions: 2
@@ -51,7 +50,7 @@ baseline_params:
         conv_dim: 16
         n_dim: 1
     generator_params:
-        learning_rate: 0.001
+        lr_g: 0.001
         beta1: 0.5
         beta2: 0.999
         dimensions: 2
@@ -60,27 +59,23 @@ baseline_params:
         conv_dim: 16
         n_dim: 1
     trainer_params:
+        mask: True
+        sample_test: False
         n_steps: 60000
         dataset: 'idk'
         n_critic: 5
-        log_step: 1000
-        sample_step: 1000
-        #lambda_cls: 500.0
+        log_step: 100
+        sample_step: 100
+        tolerance: 0.5
+        alpha: 0.75
         lambda_cls: 500.0
-        #lambda_rec: 2.1
         lambda_rec: 20.0    
-        #lambda_gp: 1.1
         lambda_gp: 10.0
         lambda_map: 49.0
-        lambda_tv: 10.0
-        #lambda_tv: 16.0
-        st: False
     logging_params:
         storage_path: 'wo_map'
         run_name: 'wo_map'
-
 trainer_params:
-    # max_epochs: 10
     max_epochs: 150
   
 logging_params:

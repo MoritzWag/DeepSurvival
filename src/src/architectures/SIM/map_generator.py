@@ -58,11 +58,12 @@ class GeneratorSIM(nn.Module):
             curr_dim = curr_dim // 2
         
         if dimensions == 2:
-            layers.append(nn.Conv2d(curr_dim, n_dim, kernel_size=5, stride=1, padding=3, bias=False))
+            #layers.append(nn.Conv2d(curr_dim, n_dim, kernel_size=5, stride=1, padding=3, bias=False))
+            layers.append(nn.Conv2d(curr_dim, n_dim, kernel_size=3, stride=1, padding=2, bias=False))
         else:
             layers.append(nn.Conv3d(curr_dim, n_dim, kernel_size=5, stride=1, padding=3, bias=False))
-
-        layers.append(nn.Sigmoid())
+        
+        #layers.append(nn.Sigmoid())
         self.main = nn.Sequential(*layers)
     
     def forward(self, x, c):
@@ -72,9 +73,11 @@ class GeneratorSIM(nn.Module):
         c = c.view(c.size(0), c.size(1), 1, 1)
         c = c.repeat(1, 1, x.size(2), x.size(3))
         x = torch.cat([x, c], dim=1)
-
         out = self.main(x)
         return out 
+
+
+
 
 
 # class Generator2d(nn.Module):

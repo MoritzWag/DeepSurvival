@@ -1,0 +1,82 @@
+model_params:
+    model_name: DeepCoxPH
+    structured_params:
+        structured_input_dim: 2
+    deep_params:
+        architecture: 'Classifier2d'
+        out_dim: 10
+        num_blocks: 2
+        n_dim: 1
+    wide_deep_params:
+        orthogonalize: False
+        output_dim: 1
+    
+model_hyperparams:
+    loss_type: 'cox_ph'
+  
+exp_params:
+    dataset: 'mnist'
+    data_path: 'data/coxph/'
+    base_folder: 'sim_rr'
+    data_type: 'coxph'
+    n_dim: 1
+    batch_size: 64
+    optimizer: 'AdamW'
+    learning_rate: 0.01
+    weight_decay: 0.0
+    scheduler_gamma: 0.95
+
+baseline_params:
+    baseline: 'stargan'
+    c_dim: 2
+    img_size: 28
+    discriminator_params:
+        n_dim: 1
+        lr_d: 0.0002
+        beta1: 0.5
+        beta2: 0.99
+        dimensions: 2
+        repeat_num: 3
+        conv_dim: 64
+    generator_params:
+        n_dim: 1
+        lr_g: 0.0002
+        beta1: 0.5
+        beta2: 0.999
+        dimensions: 2
+        repeat_num: 6
+        conv_dim: 64
+    trainer_params:
+        mask: False
+        # n_steps: 20000
+        n_steps: 10000
+        n_steps_decay: 5000
+        lr_update_step: 500
+        rampup_length_cls: 10000
+        rampup_length_rec: 3000
+        dataset: 'idk'
+        n_critic: 5
+        log_step: 100
+        sample_step: 100
+        tolerance: 0.001
+        alpha: 0.75
+        lambda_cls: 10.0
+        lambda_rec: 2.0
+        lambda_gp: 10.0
+        # lambda_cls: 200.0
+        # lambda_rec: 2.0
+        # lambda_gp: 10.0
+        # lambda_cls: 0.3
+        # lambda_rec: 3.0 
+        # lambda_gp: 9.0
+    logging_params:
+        storage_path: 'sim_copxh_color_target_cls_shapes11'
+        run_name: 'sim'
+
+trainer_params:
+    # max_epochs: 40
+    max_epochs: 30
+  
+logging_params:
+    manual_seed: 1234
+    save_dir: 'logging'

@@ -6,6 +6,7 @@ import torchvision.utils as vutils
 import matplotlib.pyplot as plt
 
 from torch import nn 
+from src.data.utils import hsl2rgb
 
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
@@ -18,6 +19,7 @@ class Visualizer(nn.Module):
     def visualize_attributions(self, 
                                images, 
                                attributions,
+                               rgb_trained, 
                                method,
                                storage_path,
                                run_name):
@@ -27,25 +29,55 @@ class Visualizer(nn.Module):
             images = images.cpu().detach().numpy()
             #attributions = attributions.cpu().detach().numpy()
 
-        fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(10, 10))
+        fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(12, 12))
         cmap_bound = np.abs(attributions).max()
 
         for i in range(len(images)):
-            # original image
-            ax[i, 0].imshow(images[i, :, :, :].squeeze(), cmap='gray')
-            ax[i, 0].set_title('Original Image')
 
-            # attributions 
-            attr = attributions[i, :, :, :].squeeze()
-            im = ax[i, 1].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='PiYG')
+            if images.shape[1] == 1:
 
-            # positive attributions
-            attr_pos = attr.clip(0, 1).squeeze()
-            im = ax[i, 2].imshow(attr_pos, vmin=-cmap_bound, vmax=cmap_bound, cmap='PiYG')
-            
-            # negative attributions
-            attr_neg = attr.clip(-1, 0).squeeze()
-            im = ax[i, 3].imshow(attr_neg, vmin=-cmap_bound, vmax=cmap_bound, cmap='PiYG')
+                # original image
+                ax[i, 0].imshow(images[i, :, :, :].squeeze(), cmap='gray')
+                ax[i, 0].set_title('Original Image')
+
+                # attributions 
+                attr = attributions[i, :, :, :].squeeze()
+                im = ax[i, 1].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+                # positive attributions
+                attr_pos = attr.clip(0, 1).squeeze()
+                im = ax[i, 2].imshow(attr_pos, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+                
+                # negative attributions
+                attr_neg = attr.clip(-1, 0).squeeze()
+                im = ax[i, 3].imshow(attr_neg, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+            else:
+                img = images[i, :, :, :]
+                shapes = img.shape
+                img = np.transpose(img, axes=(1, 2, 0))
+                if not rgb_trained:
+                    im = hsl2rgb(img)
+                #img = img.reshape(shapes[1], shapes[2], shapes[0])
+                
+                ax[i, 0].imshow(im, cmap='gray')
+                ax[i, 0].set_title('Original Image')
+
+                # attributions
+                attr = attributions[i, :, :, :]
+                attr = np.transpose(attr, axes=(1, 2, 0))
+                #attr = attributions[i, :, :, :].reshape(shapes[1], shapes[2], shapes[0]).squeeze()
+                attr = convert_to_grayscale(attr)
+                im = ax[i, 1].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+                # positive attributions
+                attr_pos = attr.clip(0, 1).squeeze()
+                im = ax[i, 2].imshow(attr_pos, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+                
+                # negative attributions
+                attr_neg = attr.clip(-1, 0).squeeze()
+                im = ax[i, 3].imshow(attr_neg, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+
 
         ax[0, 1].set_title('Attributions')
         ax[0, 2].set_title('Positive attributions')
@@ -55,13 +87,12 @@ class Visualizer(nn.Module):
             ax.axis('off')
     
         fig.colorbar(im, cax=fig.add_axes([0.95, 0.25, 0.03, 0.5]))
-
         storage_path = os.path.expanduser(storage_path)
         storage_path = f"{storage_path}/{run_name}"
         if not os.path.exists(storage_path):
             os.makedirs(storage_path)
         
-        plt.savefig(f"{storage_path}/{method}.png", dpi=300)
+        plt.savefig(f"{storage_path}/{method}.png", dpi=300, bbox_inches='tight')
 
         attributions = self.overlay_function(images=images, 
                                              attributions=attributions)
@@ -78,103 +109,6 @@ class Visualizer(nn.Module):
 
     def overlay_function(self, images, attributions):
         return np.clip(0.7 * images + 0.5 * attributions, 0, 255)
-
-    def visualize_results(self, 
-                          x_origin, 
-                          x_generated,
-                          rs_origin,
-                          rs_generated,
-                          storage_path,
-                          run_name,
-                          step):
-        """
-        """
-        x_origin = x_origin.cpu().detach().numpy()
-        x_generated = x_generated.cpu().detach().numpy()
-        rs_origin = rs_origin.cpu().detach().numpy()
-        rs_generated = rs_generated.cpu().detach().numpy()
-        fig, ax = plt.subplots(nrows=x_origin.shape[0], ncols=2, figsize=(10, 10))
-        #pdb.set_trace()
-        for i in range(len(x_origin)):
-            rs_gen = round(rs_generated[i][0], 3)
-            rs_orig = round(rs_origin[i][0], 3)
-            ax[i, 0].imshow(x_generated[i, :, :, :].squeeze(), cmap='gray')
-            #ax[i, 0].set_title(f"GI - RS: {rs_gen}")
-            ax[i, 0].set_title("GI - RS: {:.3f}".format(rs_gen))
-
-            ax[i, 1].imshow(x_origin[i, :, :, :].squeeze(), cmap='gray')
-            ax[i, 1].set_title("OI - RS: {:.3f}".format(rs_orig))
-
-        for ax in fig.axes:
-            ax.axis('off')
-        
-        storage_path = os.path.expanduser(storage_path)
-        storage_path = f"{storage_path}/{run_name}"
-        if not os.path.exists(storage_path):
-            os.makedirs(storage_path)
-        
-        plt.savefig(f"{storage_path}/baseline_{step}.png", dpi=300)
-
-
-    def visualize_3D_slices(self,
-                            slices,
-                            x_origin,
-                            x_generated,
-                            rs_origin,
-                            rs_generated,
-                            storage_path,
-                            run_name,
-                            step):
-        """
-        """
-        plt.close()
-        num_samples = len(x_origin)
-        all_slices = []
-
-        for img_one, img_two in zip(x_origin.detach().cpu(), x_generated.detach().cpu()):
-            content_slices = torch.sum(img_one, dim=(0, 2, 3)) != 0
-            img_one = img_one[:, content_slices]
-            img_two = img_two[:, content_slices]
-
-            indices, _ = torch.sort(torch.randperm(img_one.shape[1])[:slices])
-            all_slices.extend(img_one[:, indices].permute(1, 0, 2, 3))
-            all_slices.extend(img_two[:, indices].permute(1, 0, 2, 3))
-
-        fig = plt.figure(figsize=(10, 10))
-        grid = ImageGrid(
-            fig,
-            111,
-            nrows_ncols=(num_samples * 2, slices),
-            axes_pad=0.1,
-        )
-
-        for ax, arr in zip(grid, all_slices):
-            if arr.shape[0] == 2:
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore')
-                    ax.imshow(arr[0, :, :], cmap='gray', vmin=0, vmax=1)
-                    mask = np.where(arr[1, :, :] < 0.25, np.nan, arr[1, :, :])
-                    ax.imshow(mask, cmap='cool', alpha=0.1, vmin=0.25, vmax=1)
-                    ax.axis('off')
-
-            else:
-                ax.imshow(arr[0, :, :], vmin=0, vmax=1)
-                ax.axis('off')
-
-        buf = io.BytesIO()
-        fig.savefig(buf)
-        buf.seek(0)
-        img = deepcopy(Image.open(buf))
-        buf.close()
-        plt.close(fig)
-
-        storage_path = os.path.expanduser(storage_path)
-        storage_path = f"{storage_path}/{run_name}"
-        if not os.path.exists(storage_path):
-            os.makedirs(storage_path)
-
-        fig.savefig(f"{storage_path}/baseline3d_{step}.png")
-
 
     def plot_riskscores(self, 
                         riskscores,
@@ -216,7 +150,7 @@ class Visualizer(nn.Module):
         plt.scatter(x=rs_origin, y=rs_generated)
         plt.xlabel("Riskscore - Original")
         plt.ylabel("Riskscore - Generated")
-        plt.ylim(np.min(rs_generated), np.max(rs_generated))
+        plt.ylim(np.min(rs_origin), np.max(rs_origin))
         plt.xlim(np.min(rs_origin), np.max(rs_origin))
 
         storage_path = os.path.expanduser(storage_path)
@@ -227,3 +161,8 @@ class Visualizer(nn.Module):
         plt.savefig(f"{storage_path}/scatter_orig_gen_{epoch}.png")
         plt.close()
     
+
+def convert_to_grayscale(attributions):
+    """
+    """
+    return np.average(attributions, axis=2)

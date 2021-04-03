@@ -3,12 +3,11 @@ model_params:
     structured_params:
         structured_input_dim: 21
     deep_params:
-        out_dim: 10
+        out_dim: 60
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
         hidden_channels: [16, 32, 64, 128]
-        #hidden_channels: [32, 64, 128, 256]
         kernel_sizes: [5, 3, 3, 3]
         strides: [2, 2, 2, 2]
         padding: [2, 1, 1, 1]
@@ -27,7 +26,7 @@ exp_params:
     data_type: 'coxph'
     simulate: False
     n_dim: 1
-    batch_size: 128
+    batch_size: 256
     optimizer: 'AdamW'
     #learning_rate: 0.01
     learning_rate: 0.0000335

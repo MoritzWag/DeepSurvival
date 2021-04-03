@@ -46,6 +46,13 @@ def update_config(config, args):
             if config[key].__contains__(name):
                 config[key][name] = value
 
+        for key in config['baseline_params'].keys():
+            try:
+                if config['baseline_params'][key].__contains__(name):
+                    config['baseline_params'][key][name] = value
+            except:
+                pass
+
     return config
 
 def get_optimizer(model,

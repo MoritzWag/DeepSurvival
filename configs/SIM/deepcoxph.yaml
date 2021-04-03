@@ -5,6 +5,7 @@ model_params:
     deep_params:
         architecture: 'Classifier2d'
         out_dim: 10
+        num_blocks: 2
         n_dim: 3
     wide_deep_params:
         orthogonalize: False
@@ -16,12 +17,12 @@ model_hyperparams:
 exp_params:
     dataset: 'mnist'
     data_path: 'data/coxph/'
-    base_folder: 'simulation'
+    base_folder: 'sim_cont'
     data_type: 'coxph'
     n_dim: 3
     batch_size: 64
     optimizer: 'AdamW'
-    learning_rate: 0.005
+    learning_rate: 0.01
     weight_decay: 0.0
     scheduler_gamma: 0.95
 
@@ -31,7 +32,7 @@ baseline_params:
     img_size: 28
     discriminator_params:
         n_dim: 3
-        learning_rate: 0.000001
+        lr_d: 0.0001
         beta1: 0.5
         beta2: 0.99
         dimensions: 2
@@ -39,34 +40,39 @@ baseline_params:
         conv_dim: 64
     generator_params:
         n_dim: 3
-        learning_rate: 0.0001
+        lr_g: 0.0001
         beta1: 0.5
         beta2: 0.999
         dimensions: 2
         repeat_num: 6
         conv_dim: 64
     trainer_params:
-        n_steps: 5000
+        mask: False
+        sample_test: True
+        # n_steps: 20000
+        n_steps: 20000
+        n_steps_decay: 5000
+        lr_update_step: 5000
+        rampup_length_cls: 10000
+        rampup_length_rec: 0
         dataset: 'idk'
         n_critic: 5
-        log_step: 100
-        sample_step: 100
-        tolerance: 0.1
-        alpha: 0.9
-        lambda_cls: 1.0
-        #lambda_rec: 8.0
-        lambda_rec: 200.0
-        lambda_gp: 40.0
+        log_step: 500
+        sample_step: 500
+        tolerance: 0.001
+        alpha: 0.6
         # lambda_cls: 1.0
         # lambda_rec: 8.0
-        # lambda_gp: 10.0
+        # lambda_gp: 10.0  
+        lambda_cls: 200.0
+        lambda_rec: 2.0
+        lambda_gp: 10.0
     logging_params:
-        storage_path: 'sim_copxh_color_target_cls_shapes9'
+        storage_path: 'sim_colored_rectangles2'
         run_name: 'sim'
 
-
 trainer_params:
-    max_epochs: 20
+    max_epochs: 30
   
 logging_params:
     manual_seed: 1234

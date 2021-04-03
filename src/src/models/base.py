@@ -74,17 +74,33 @@ class BaseModel(ABC, Evaluator, Visualizer):
                         'event': events, 'time': times}
 
         return dict_batches
+
+    def _sample_batch(self, data, num_obs, num_batches=1):
+        """
+        """
+        batches = {}
+        for i in range(num_batches):
+            acc_batch = self._accumulate_batches(data=data)
+            indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
+            print(indeces)
+            for value, key in zip(acc_batch.values(), acc_batch.keys()):
+                acc_batch[key] = value[indeces]
+
+            acc_batch['indeces'] = indeces
+            batches[f"batch_{i}"] = acc_batch
+        
+        return batches
     
-    def _sample_batch(self, data, num_obs):
-        """
-        """
-        acc_batch = self._accumulate_batches(data=data)
-        indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
+    # def _sample_batch(self, data, num_obs):
+    #     """
+    #     """
+    #     acc_batch = self._accumulate_batches(data=data)
+    #     indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
         
-        for value, key in zip(acc_batch.values(), acc_batch.keys()):
-            acc_batch[key] = value[indeces]
+    #     for value, key in zip(acc_batch.values(), acc_batch.keys()):
+    #         acc_batch[key] = value[indeces]
         
-        return acc_batch
+    #     return acc_batch, indeces
 
     def _build_lpdn_model(self):
         """
@@ -100,10 +116,10 @@ class BaseModel(ABC, Evaluator, Visualizer):
 
             # convert deep part
             lpdn_deep = convert_to_lpdn(deep_model)
-            first_layer = lpdn_deep.modules_list[0]
+            first_layer = lpdn_deep.lp_modules_list[0]
 
             # remove first layer of deep part 
-            lpdn_deep = lpdn_deep.modules_list[1:]
+            lpdn_deep = lpdn_deep.lp_modules_list[1:]
             
             # convert linear layer after concatentation
             lpdn_concat = convert_layer(concat_layer)
@@ -172,12 +188,9 @@ class LPModel(nn.Module):
         (m1s, v1s), (m2s, v2s) = structured_input
 
         # run through observations with feature i 
-        #pdb.set_trace()
-        # m1u, v1u = self.deep((m1u.float(), v1u.float()))
         try:
             m1u, v1u = self.deep((m1u, v1u))
         except:
-            print('NOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
             self.deep = self.deep.double()
             m1u, v1u = self.deep((m1u, v1u))
         # concatenate with structured input 

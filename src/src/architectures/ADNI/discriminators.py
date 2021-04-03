@@ -63,7 +63,8 @@ class DiscriminatorADNI(nn.Module):
         )
         
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(in_features=1024, out_features=1)
+        #self.linear = nn.Linear(in_features=1024, out_features=1)
+        self.linear = nn.Linear(in_features=1280, out_features=1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):

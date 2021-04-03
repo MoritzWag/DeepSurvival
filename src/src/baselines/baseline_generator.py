@@ -4,6 +4,7 @@ import time
 import os
 import io
 import datetime 
+import tempfile
 import pandas as pd
 import numpy as np 
 import matplotlib
@@ -17,8 +18,11 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from PIL import Image
 from torch import nn
 from torchvision.utils import save_image
+from sksurv.linear_model.coxph import BreslowEstimator
+from sksurv.nonparametric import kaplan_meier_estimator
 
 from src.postprocessing import plot_train_progress
+from src.data.utils import hsl2rgb
 
 class BaselineGenerator(nn.Module):
     """
@@ -33,7 +37,8 @@ class BaselineGenerator(nn.Module):
                  generator_params,
                  discriminator_params,
                  trainer_params,
-                 logging_params):
+                 logging_params,
+                 rgb_trained):
         super(BaselineGenerator, self).__init__()
 
         self.discriminator = discriminator
@@ -45,9 +50,12 @@ class BaselineGenerator(nn.Module):
         self.img_size = img_size
         self.trainer_params = trainer_params
         self.logging_params = logging_params
+        self.rgb_trained = rgb_trained
+        self.mask = self.trainer_params['mask']
+        self.lr_update_step = self.trainer_params['lr_update_step']
 
         # discriminator params
-        self.d_lr = discriminator_params['learning_rate']
+        self.d_lr = discriminator_params['lr_d']
         self.d_beta1 = discriminator_params['beta1']
         self.d_beta2 = discriminator_params['beta2']
         self.d_repeat_num = discriminator_params['repeat_num']
@@ -56,7 +64,7 @@ class BaselineGenerator(nn.Module):
         self.d_dimensions = discriminator_params['dimensions']
 
         # generator params
-        self.g_lr = generator_params['learning_rate']
+        self.g_lr = generator_params['lr_g']
         self.g_beta1 = generator_params['beta1']
         self.g_beta2 = generator_params['beta2']
         self.g_repeat_num = generator_params['repeat_num']
@@ -70,12 +78,15 @@ class BaselineGenerator(nn.Module):
         self.train_history = pd.DataFrame()
         self.sigmoid = nn.Sigmoid()
         self.tanh = nn.Tanh()
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
     
     def build_model(self):
         """
         """
         # configure discriminator
-        self.D = self.discriminator(n_dim=self.d_n_dim, 
+        self.D = self.discriminator(img_size=self.img_size,
+                                    n_dim=self.d_n_dim, 
                                     conv_dim=self.d_conv_dim, 
                                     dimensions=self.d_dimensions,
                                     repeat_num=self.d_repeat_num)
@@ -96,6 +107,13 @@ class BaselineGenerator(nn.Module):
         self.survival_model.to(self.device).float()
         self.put_parallel()
     
+    def update_lr(self, g_lr, d_lr):
+        """Decay learning rates of the generator and discriminator."""
+        for param_group in self.g_optimizer.param_groups:
+            param_group['lr'] = g_lr
+        for param_group in self.d_optimizer.param_groups:
+            param_group['lr'] = d_lr
+    
     def reset_grad(self):
         self.g_optimizer.zero_grad()
         self.d_optimizer.zero_grad()
@@ -109,11 +127,14 @@ class BaselineGenerator(nn.Module):
         self.G.to(self.device).float()
         self.D.to(self.device).float()
 
-    def train(self, train_gen, val_gen):
+    def train(self, train_gen, val_gen, test_gen):
         """
         """
         print("start training")
         start_time = time.time()
+        self.rs_mean, self.rs_min, self.rs_max = self.riskscores_stats(train_gen)
+        self.threshold = self.set_threshold(train_gen)
+        #self.threshold = self.rs_max
         for step in range(self.trainer_params['n_steps']):
             self.D.train()
             self.G.train()
@@ -124,12 +145,14 @@ class BaselineGenerator(nn.Module):
                 train_gen_iter = iter(train_gen)
                 batch = next(train_gen_iter)
             images = batch['images'].float().to(self.device)
-            #images.requires_grad = True
             tabular_data = batch['tabular_data'].float().to(self.device)
-            #tabular_data.requires_grad = True
+            # images = batch[0].float().to(self.device)
+            # tabular_data = batch[1].float().to(self.device)
 
             # derive labels for batch
-            label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
+            label_target, label_origin = self.generate_labels(images=images, 
+                                                              tabular_data=tabular_data, 
+                                                              threshold=self.threshold)
             
             # put data on device
             label_target = label_target.to(self.device)
@@ -146,17 +169,10 @@ class BaselineGenerator(nn.Module):
             d_loss_real =  - torch.mean(out_src)
 
             # Compute loss with fake images
-            x_mask = self.G(images, label_target.float())
-            output_mask = x_mask
-            #x_fake = images + output_mask
-            x_fake = x_mask
-            # x_fake = self.tanh(x_fake)
-
+            x_fake = self.map_generated(images, label_target.float(), mask=self.mask)
 
             out_src = self.D(x_fake)
             d_loss_fake = torch.mean(out_src)
-            #out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
-            #out_domain = self.survival_model(tabular_data, x_fake)
 
             # Compute loss for gradient penalty
             if images.ndim == 5:
@@ -187,37 +203,33 @@ class BaselineGenerator(nn.Module):
 
             if (step + 1) % self.trainer_params['n_critic'] == 0:
                 # Original-to-target domain 
-                x_mask = self.G(images, label_target.float())
-                output_mask = x_mask
-                #x_fake = images + output_mask
-                x_fake = x_mask
-                # x_fake = self.tanh(x_fake)
-
+                x_fake = self.map_generated(images, label_target.float(), mask=self.mask)
+                
                 out_src = self.D(x_fake)
-                #out_domain = self.survival_model(tabular_data, x_fake)
-                out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
+                out_domain = self.survival_model(tabular_data, x_fake)
+                #out_domain = self.survival_model.predict_on_images(x_fake, tabular_data)
                 g_loss_fake = - torch.mean(out_src)
-                g_loss_cls = self.domain_loss(out_domain, label_target, alpha= self.trainer_params['alpha'], tolerance=self.trainer_params['tolerance'],)
+                g_loss_cls = self.domain_loss(out_domain, 
+                                              label_target, 
+                                              alpha=self.trainer_params['alpha'], 
+                                              tolerance=self.trainer_params['tolerance'],
+                                              threshold=self.threshold)
 
                 # Target-to-original domain
-
-                x_mask_recon = self.G(x_fake, label_origin)
-                output_mask_recon = x_mask_recon
-                #x_reconstruct = x_fake + output_mask_recon
-                x_reconstruct = x_mask_recon
-                # x_reconstruct = self.tanh(x_reconstruct)
+                x_reconstruct, x_mask = self.map_generated(x_fake, label_origin, mask=self.mask, return_mask=True)
 
                 g_loss_rec = self.reconstruction_loss(images, x_reconstruct)
 
-                # map_loss = torch.abs(x_mask).mean()
-                
+                lambda_cls_ramp_factor = self.linear_rampup(step=step, rampup_length=self.trainer_params['rampup_length_cls'])
+                lambda_rec_ramp_factor = self.linear_rampup(step=step, rampup_length=self.trainer_params['rampup_length_rec'])
 
                 # Backward and optimize
-                # + 0.0001 * map_loss
-                g_loss = g_loss_fake + self.trainer_params['lambda_rec'] * g_loss_rec \
-                        + self.trainer_params['lambda_cls'] * g_loss_cls 
-                        # + self.trainer_params['lambda_map'] * map_loss \
-                    
+                g_loss = g_loss_fake \
+                            + self.trainer_params['lambda_rec'] * lambda_rec_ramp_factor * g_loss_rec \
+                            + self.trainer_params['lambda_cls'] * lambda_cls_ramp_factor * g_loss_cls 
+                if self.mask:
+                    map_loss = torch.abs(x_mask).mean()
+                    g_loss += self.trainer_params['lambda_map'] * map_loss
 
                 self.reset_grad()
                 g_loss.backward()
@@ -227,7 +239,9 @@ class BaselineGenerator(nn.Module):
                 loss['G/loss_fake'] = g_loss_fake.item()
                 loss['G/loss_rec'] = g_loss_rec.item()
                 loss['G/loss_cls'] = g_loss_cls.item()
-                #loss['G/loss_norm'] = map_loss.item()
+                if self.mask:
+                    loss['G/loss_map'] = map_loss.item()
+
 
                 train_history = pd.DataFrame([[value for value in loss.values()]],
                                                     columns=[key for key in loss.keys()])
@@ -241,12 +255,22 @@ class BaselineGenerator(nn.Module):
                 for tag, value in loss.items():
                     log += ", {}: {:.4f}".format(tag, value)
                 print(log)
-                print(f"max value: {torch.max(x_mask_recon)} | min value: {torch.min(x_mask_recon)}")
+                print(f"riskscore_mean: {self.rs_mean} | threshold: {self.threshold}")
+                
+                # store test results!!!
+                if self.trainer_params['sample_test']:
+                    self.test(test_gen=test_gen, step=step)
             
             if (step + 1) % self.trainer_params['sample_step'] == 0:
                 self.validate(val_gen=val_gen, step=step)
+            
+            if (step + 1) % self.lr_update_step == 0 and (step + 1) > (self.trainer_params['n_steps'] - self.trainer_params['n_steps_decay']):
+                self.g_lr -= (self.g_lr / float(self.trainer_params['n_steps_decay']))
+                self.d_lr -= (self.d_lr / float(self.trainer_params['n_steps_decay']))
+                self.update_lr(self.g_lr, self.d_lr)
+                print(f"Decayed learning rates | g_lr: {self.g_lr}, d_lr: {self.d_lr}")
 
-        plot_train_progress(self.train_history, storage_path="./baseline_generator")
+        plot_train_progress(self.train_history, storage_path=f"./{self.logging_params['storage_path']}/bg_losses/bg_losses")
 
     def validate(self, val_gen, step):
         """
@@ -261,31 +285,28 @@ class BaselineGenerator(nn.Module):
             batch = next(val_gen_iter)
         images = batch['images'].float().to(self.device)
         tabular_data = batch['tabular_data'].float().to(self.device)
+
         # derive labels for batch
-        label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
+        label_target, label_origin = self.generate_labels(images=images, 
+                                                          tabular_data=tabular_data,
+                                                          threshold=self.threshold)
         
         # put data on device
         label_target = label_target.to(self.device)
         label_origin = label_origin.to(self.device)
 
         with torch.no_grad():
-            x_mask = self.G(images, label_target.float())
-            #x_generated = images + x_mask
-            x_generated = x_mask
-            #x_generated = self.tanh(x_generated)
-
+            x_generated, x_mask = self.map_generated(images, label_target.float(), mask=self.mask, return_mask=True)
             # derive predicted riskscores for original and generated images
-            rs_origin = self.survival_model.predict_on_images(images, tabular_data)
-            #rs_origin = self.survival_model(tabular_data, images)
-
-            rs_generated = self.survival_model.predict_on_images(x_generated, tabular_data)
-            #rs_generated = self.survival_model(tabular_data, x_generated)
+            rs_origin = self.survival_model(tabular_data, images)
+            rs_generated = self.survival_model(tabular_data, x_generated)
             
-            self.survival_model.plot_gen_origin_rs(rs_origin=rs_origin,
-                                                    rs_generated=rs_generated,
-                                                    storage_path=self.logging_params['storage_path'],
-                                                    run_name=self.logging_params['run_name'],
-                                                    epoch=step)
+            self.plot_gen_origin_rs(rs_origin=rs_origin,
+                                    rs_generated=rs_generated,
+                                    threshold=self.threshold,
+                                    storage_path=self.logging_params['storage_path'],
+                                    run_name=self.logging_params['run_name'],
+                                    epoch=step)
 
             # concatenate such that original images and generated images are plotted together!
             samples = np.random.randint(images.shape[0], size=4)
@@ -294,15 +315,7 @@ class BaselineGenerator(nn.Module):
             images = images[samples, :, :, :]
             rs_origin = rs_origin[samples]
             rs_generated = rs_generated[samples]
-
-            # self.survival_model.plot_riskscores(riskscores=rs_origin,
-            #                                     storage_path=self.logging_params['storage_path'],
-            #                                     run_name=self.logging_params['run_name'],
-            #                                     epoch=step)
-            # self.survival_model.plot_riskscores(riskscores=rs_generated)
-
             
-
             if images.ndim != 5:
                 self.visualize_results(x_origin=images,
                                        x_generated=x_generated,
@@ -311,7 +324,8 @@ class BaselineGenerator(nn.Module):
                                        rs_generated=rs_generated,
                                        storage_path=self.logging_params['storage_path'],
                                        run_name=self.logging_params['run_name'], 
-                                       step=step)
+                                       step=step,
+                                       plot_mask=True if self.mask else False)
             else:
                 self.visualize_3D_slices(slices=5,
                                          x_origin=images,
@@ -322,24 +336,58 @@ class BaselineGenerator(nn.Module):
                                          run_name=self.logging_params['run_name'],
                                          step=step)
 
-    # def test(self, batch):
-    #     """
-    #     """
-    #     images = batch['images'].to(self.device)
-    #     tabular_data = batch['tabular_data'].to(self.device)
+    def test(self, test_gen, step):
+        """
+        """
+        acc_batch = self.survival_model._accumulate_batches(data=test_gen)
+        images = acc_batch['images'].float().to(self.device)
+        tabular_data = acc_batch['tabular_data'].float().to(self.device)
 
-    #     # derive labels for batch
-    #     label_target, label_origin = self.generate_labels(images=images, tabular_data=tabular_data)
-    #     # put data on device
-    #     label_target = label_target.to(self.device)
-    #     label_origin = label_origin.to(self.device)
-
-    #     x_generated = self.G(images, label_target.float())
-
-    #     # classification results: 
-
-    #     return x_generated
+        # generate labels
+        label_target, label_origin = self.generate_labels(images=images, 
+                                                          tabular_data=tabular_data,
+                                                          threshold=self.threshold)
         
+        # put data on device
+        label_target = label_target.to(self.device)
+        label_origin = label_origin.to(self.device)
+
+        # generate images 
+        x_generated, x_mask = self.map_generated(images, label_target.float(), mask=self.mask, return_mask=True)
+
+        # store generated images, images and tabular_data
+        data_dict = {'bs_img': x_generated.cpu().detach().numpy(),
+                     'images': images.cpu().detach().numpy(),
+                     'tabular_data': tabular_data.cpu().detach().numpy()}
+        data_dict = {'bs_img': x_generated.cpu().detach().numpy()}
+
+        storage_path = os.path.expanduser(self.logging_params['storage_path'])
+        storage_path = f"{storage_path}/{self.logging_params['run_name']}/test_results"
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
+        np.save(f"{storage_path}/data_dict_{step}.npy", data_dict)
+
+        return x_generated
+
+    def map_generated(self, images, label_target, mask=True, return_mask=False):
+        """
+        """
+        x_mask = self.G(images, label_target.float())
+        if mask:
+            x_generated = images + mask
+            x_generated = self.tanh(x_generated)
+            x_generated = torch.clamp(x_generated, min=0, max=1)
+        else:
+            x_generated = x_mask
+            x_mask = self.sigmoid(x_mask)
+            x_generated = self.sigmoid(x_generated)
+        
+        if return_mask:
+            return x_generated, x_mask
+        else:
+            return x_generated
+
     def gradient_penalty(self, y, x):
         """
         """
@@ -356,23 +404,16 @@ class BaselineGenerator(nn.Module):
         
         return torch.mean((dydx_l2norm - 1)**2)
 
-    def adversarial_loss(self, pred, true):
-        """
-        """
-        return nn.BCELoss(pred, true)
-
-    #alpha = 0.9
-    def domain_loss(self, preds, target_label, alpha=0.9, tolerance=0.25):
+    def domain_loss(self, preds, target_label, alpha=0.9, tolerance=0.25, threshold=0.0):
         """Adaptive quantile loss.
         """
-
         errors = torch.zeros(size=preds.shape)
         losses = []
         for idx in range(preds.shape[0]):
             if target_label[idx, 1] == 1.:
-                tol = -1 * tolerance
+                tol = threshold - tolerance
             else:
-                tol = tolerance
+                tol = threshold + tolerance
             errors[idx] = torch.abs(preds[idx] - tol)
             if target_label[idx, 1] == 1.:
                 if preds[idx] > tol:
@@ -397,20 +438,59 @@ class BaselineGenerator(nn.Module):
         loss = torch.mean(torch.abs(x_real - x_reconstruct))
         return loss
 
+    def mean_riskscore(self, train_gen):
+        """
+        """
+        acc_batch = self.survival_model._accumulate_batches(train_gen)
 
-    def generate_labels(self, images, tabular_data):
+        riskscores = self.survival_model(**acc_batch)
+        mean_riskscore = torch.mean(riskscores)
+
+        return mean_riskscore
+
+    def riskscores_stats(self, train_gen):
         """
         """
-        prediction = self.survival_model.predict_on_images(images=images, tabular_data=tabular_data)
-        log_prediction = prediction
-        # try:
-        #     log_prediction = torch.log(prediction).squeeze(1)
-        # except:
-        #     pdb.set_trace()
-        label_target = torch.zeros(size=(log_prediction.shape[0], 2))
-        label_origin = torch.zeros(size=(log_prediction.shape[0], 2))
+        acc_batch = self.survival_model._accumulate_batches(train_gen)
+        riskscores = self.survival_model(**acc_batch)
+        mean_rs = torch.mean(riskscores)
+        min_rs = torch.min(riskscores)
+        max_rs = torch.max(riskscores)
+
+        return mean_rs, min_rs, max_rs
+
+    def riskscores_normalization(self, riskscores):
+        """
+        """
+        rs_norm = (riskscores - self.rs_mean) / (self.rs_max - self.rs_min)
+        return rs_norm
+
+    def set_threshold(self, train_gen):
+        """
+        """
+        acc_batch = self.survival_model._accumulate_batches(train_gen)
+
+        riskscores = self.survival_model(**acc_batch)
+        riskscores = riskscores.detach().cpu().numpy()
+        event, time = acc_batch['event'].detach().cpu().numpy(), acc_batch['time'].detach().cpu().numpy()
+        breslow = BreslowEstimator().fit(riskscores, event, time)
+        cum_bh = breslow.cum_baseline_hazard_
+        t, prob_surv = kaplan_meier_estimator(event, time)
+        idx = (np.abs(prob_surv - 0.5)).argmin()
+        cum_bh_median = cum_bh.y[idx]
+        threshold = np.log(-np.log(0.5)/cum_bh_median)
+
+        return threshold        
+
+    def generate_labels(self, images, tabular_data, threshold=0.0):
+        """
+        """
+        #prediction = self.survival_model.predict_on_images(images=images, tabular_data=tabular_data)
+        prediction = self.survival_model(images=images, tabular_data=tabular_data)
+        label_target = torch.zeros(size=(prediction.shape[0], 2))
+        label_origin = torch.zeros(size=(prediction.shape[0], 2))
         for idx in range(label_target.shape[0]):
-            if log_prediction[idx] > 0: 
+            if prediction[idx] > threshold: 
                 label_target[idx, 1] = 1.0
                 label_origin[idx, 0] = 1.0 
             else:
@@ -418,6 +498,16 @@ class BaselineGenerator(nn.Module):
                 label_origin[idx, 1] = 1.0
     
         return label_target.float(), label_origin.float()
+
+    def linear_rampup(self, step, rampup_length=10):
+        """linear rampup factor for the mixmatch model
+        step = current step
+        rampup_length = amount of steps till final weight
+        """
+        if rampup_length == 0:
+            return 1.0
+        else:
+            return float(np.clip(step / rampup_length, 0, 1))
 
     def visualize_results(self, 
                           x_origin, 
@@ -427,7 +517,8 @@ class BaselineGenerator(nn.Module):
                           rs_generated,
                           storage_path,
                           run_name,
-                          step):
+                          step,
+                          plot_mask=False):
         """
         """
         x_origin = x_origin.cpu().detach().numpy()
@@ -435,36 +526,51 @@ class BaselineGenerator(nn.Module):
         x_mask = x_mask.cpu().detach().numpy()
         rs_origin = rs_origin.cpu().detach().numpy()
         rs_generated = rs_generated.cpu().detach().numpy()
-        fig, ax = plt.subplots(nrows=x_origin.shape[0], ncols=3, figsize=(10, 10))
+        fig, ax = plt.subplots(nrows=x_origin.shape[0], ncols=3 if plot_mask else 2, figsize=(10, 10))
 
         for i in range(len(x_origin)):
             rs_gen = round(rs_generated[i][0], 3)
             rs_orig = round(rs_origin[i][0], 3)
             if x_generated.shape[1] == 1:
-                ax[i, 0].imshow(x_generated[i, :, :, :].squeeze(), cmap='gray', vmin=0, vmax=1)
+                x_gen = np.transpose(x_generated, axes=(0, 2, 3, 1))
+                x_gen = x_gen[i, :, :, :]
+                ax[i, 0].imshow(x_gen, cmap='gray', vmin=0, vmax=1)
             else:
-                shapes = x_generated.shape
-                x_gen = x_generated.reshape(-1, shapes[2], shapes[3], shapes[1])
-                ax[i, 0].imshow(x_gen[i, :, :, :])
+                x_gen = np.transpose(x_generated, axes=(0, 2, 3, 1))
+                if self.rgb_trained:
+                    x_g = x_gen[i, :, :, :]
+                else:
+                    x_g = hsl2rgb(x_gen[i, :, :, :])
+                ax[i, 0].imshow(x_g)
 
             ax[i, 0].set_title("GI - RS: {:.3f}".format(rs_gen))
 
             if x_origin.shape[1] == 1:
-                ax[i, 1].imshow(x_origin[i, :, :, :].squeeze(), cmap='gray')
+                x_orig = np.transpose(x_origin, axes=(0, 2, 3, 1))
+                x_orig = x_orig[i, :, :, :]
+                ax[i, 1].imshow(x_orig, cmap='gray', vmin=0, vmax=1)
             else:
-                shapes = x_origin.shape
-                x_orig = x_origin.reshape(-1, shapes[2], shapes[3], shapes[1])
-                ax[i, 1].imshow(x_orig[i, :, :, :])
+                x_orig = np.transpose(x_origin, axes=(0, 2, 3, 1))
+                if self.rgb_trained:
+                    x_o = x_orig[i, :, :, :]
+                else:
+                    x_o = hsl2rgb(x_orig[i, :, :, :])
+                ax[i, 1].imshow(x_o)
 
 
             ax[i, 1].set_title("OI - RS: {:.3f}".format(rs_orig))
-
-            if x_mask.shape[1] == 1:
-                ax[i, 2].imshow(-x_mask[i, :, :, :].squeeze(), cmap='gray')
-            else:
-                shapes = x_mask.shape
-                x_m = x_mask.reshape(-1, shapes[2], shapes[3], shapes[1])
-                ax[i, 2].imshow(x_m[i, :, :, :])
+            if plot_mask:
+                if x_mask.shape[1] == 1:
+                    x_m = np.transpose(x_mask, axes=(0, 2, 3, 1))
+                    x_m = x_m[i, :, :, :]
+                    ax[i, 2].imshow(x_m, cmap='gray', vmin=0, vmax=1)
+                else:
+                    x_ma = np.transpose(x_mask, axes=(0, 2, 3, 1))
+                    if self.rgb_trained:
+                        x_m = x_ma[i, :, :, :]
+                    else:
+                        x_m = hsl2rgb(x_ma[i, :, :, :])
+                    ax[i, 2].imshow(x_m)
 
         for ax in fig.axes:
             ax.axis('off')
@@ -475,6 +581,41 @@ class BaselineGenerator(nn.Module):
             os.makedirs(storage_path)
         
         plt.savefig(f"{storage_path}/baseline_{step}.png", dpi=300)
+
+    def plot_gen_origin_rs(self, 
+                           rs_origin,
+                           rs_generated,
+                           threshold,
+                           storage_path,
+                           run_name,
+                           epoch):
+        """
+        """
+        try:
+            rs_origin = rs_origin.detach().cpu().numpy().squeeze()
+            rs_generated = rs_generated.detach().cpu().numpy().squeeze()
+        except:
+            pass 
+
+        plt.close()
+        plt.scatter(x=rs_origin, y=rs_generated)
+        plt.xlabel("Riskscore - Original")
+        plt.ylabel("Riskscore - Generated")
+        plt.ylim(np.min(rs_origin), np.max(rs_origin))
+        plt.xlim(np.min(rs_origin), np.max(rs_origin))
+        x = np.arange(np.min(rs_origin), np.max(rs_origin), 0.01)
+        y = np.repeat(threshold, x.shape[0])
+        plt.plot(x, y, 'm-')
+        
+        storage_path = os.path.expanduser(storage_path)
+        storage_path = f"{storage_path}/{run_name}"
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
+        plt.savefig(f"{storage_path}/scatter_orig_gen_{epoch}.png")
+        plt.close()
+
+
 
     def visualize_3D_slices(self,
                             slices,

@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 
+from torch.nn.utils import spectral_norm
+
 
 class Identity(nn.Module):
     def __init__(self, inplace=False):
@@ -21,7 +23,6 @@ def crop_and_concat(upsampled, bypass, crop=False):
         bypass = F.pad(bypass, (-c, -c, -c, -c))
     return torch.cat((upsampled, bypass), 1)
 
-
 def conv2d_bn_block(in_channels, out_channels, kernel=3, stride=1, padding=1, momentum=0.01, activation=ACTIVATION):
     '''
     returns a block conv-bn-activation
@@ -31,7 +32,6 @@ def conv2d_bn_block(in_channels, out_channels, kernel=3, stride=1, padding=1, mo
         activation(),
         nn.BatchNorm2d(out_channels, momentum=momentum),
     )
-
 
 def deconv2d_bn_block(in_channels, out_channels, use_upsample=False, kernel=4, stride=2, padding=1, momentum=0.01, activation=ACTIVATION):
     '''
@@ -63,7 +63,6 @@ def dense_layer_bn(in_dim, out_dim, momentum=0.01, activation=ACTIVATION):
         activation()
     )
 
-
 def conv3d_bn_block(in_channels, out_channels, kernel=3, stride=1, padding=1, momentum=0.01, activation=ACTIVATION):
     '''
     returns a block 3Dconv-3Dbn-activation
@@ -73,7 +72,6 @@ def conv3d_bn_block(in_channels, out_channels, kernel=3, stride=1, padding=1, mo
         activation(),
         nn.BatchNorm3d(out_channels, momentum=momentum),
     )
-
 
 def conv2d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activation=ACTIVATION):
     '''
@@ -91,6 +89,16 @@ def conv3d_block(in_channels, out_channels, kernel=3, stride=1, padding=1, activ
     return nn.Sequential(
         nn.Conv3d(in_channels, out_channels, kernel, stride=stride, padding=padding),
         activation(),
+    )
+
+
+def conv2d_sn_block(in_channels, out_channels, kernel_size, stride, padding, activation, bias=False):
+    """
+    """
+    return nn.Sequential(
+        spectral_norm(nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=bias)),
+        activation(),
+
     )
 
 def conv2d_intnorm_block(in_channels, out_channels, kernel_size, stride, padding, activation=ACTIVATION, bias=False):
@@ -133,6 +141,15 @@ def conv3d_intnorm_block(in_channels, out_channels, kernel_size, stride, padding
         activation(inplace=True),
     )
 
+def conv2d_mp_block(in_channels, out_channels, kernel_size, activation=ACTIVATION):
+    """
+    returns a block 2dconv-MaxPool-activation
+    """
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, kernel_size),
+        activation(),
+        nn.MaxPool2d(kernel_size=2),
+    )
 
 class ResidualBlockInstanceNorm(nn.Module):
     """
@@ -213,7 +230,6 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
 
         return out
-
 
 
 class ResidualBottleneckBlock(nn.Module):

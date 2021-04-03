@@ -12,7 +12,6 @@ from lpdn import convert_to_lpdn, convert_layer
 class DSAP():
     """
     """
-    
     def __init__(self,
                  player_generator,
                  input_shape,
@@ -112,5 +111,6 @@ class DSAP():
                     shape_out += [1] * len(mask_output.shape)
 
                     result += np.reshape(y, shape_out) * mask_output
+
         result = result.reshape(images.shape)
         return result

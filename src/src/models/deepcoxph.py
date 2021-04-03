@@ -28,6 +28,7 @@ class DeepCoxPH(BaseModel):
         self.overall_dim = self.structured_input_dim + self.deep.out_dim
         self.linear = nn.Linear(in_features=self.overall_dim, out_features=self.output_dim)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.tanh = nn.Tanh()
 
     def forward(self, tabular_data, images, **kwargs):
         
@@ -38,14 +39,13 @@ class DeepCoxPH(BaseModel):
         else:
             features_concatenated = torch.cat((tabular_data, unstructured), axis=1)
         
-        riskscore = self.linear(features_concatenated.float())
-
+        riskscore = self.tanh(self.linear(features_concatenated.float()))
+        
         return riskscore
 
     def predict_on_images(self, images, tabular_data, **kwargs):
         """
         """
-       
         unstructured = self.deep(images)
         if self.orthogonalize:
             unstructured_orth = self._orthogonalize(tabular_data, unstructured)
@@ -143,7 +143,7 @@ class DeepCoxPH(BaseModel):
         """
         """
 
-        lamb = torch.min(torch.eig(x)[0])
+        lamb = torch.min(torch.eig(x, eigenvectors=True)[0])
         lamb = lamb - math.sqrt(1e-9)
         # if smallest eigenvalue is negative => not semipositive definite
         if lamb < -1e-10:
