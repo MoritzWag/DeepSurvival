@@ -32,6 +32,20 @@ parser.add_argument('--split', type=int, default=None,
 parser.add_argument('--learning_rate', type=float, default=None,
                     help='learning rate for survival model')
 
+#baseline params
+parser.add_argument('--alpha', type=float, default=None,
+                    help="penalty for domain loss")
+parser.add_argument('--lambda_cls', type=float, default=None,
+                    help='loss weight for domain loss')
+parser.add_argument('--lambda_gp', type=float, default=None,
+                    help="loss weight for  gradient penalty")
+parser.add_argument('--lambda_rec', type=float, default=None,
+                    help='loss weight for reconstruction')
+parser.add_argument('--n_critic', type=int, default=None,
+                    help='number of generator steps per discriminator')
+parser.add_argument('--storage_path', type=str, default=None,
+                    help="path where outputs of baseline generator are stored")
+
 args = parser.parse_args()
 
 with open(args.filename, 'r') as file:

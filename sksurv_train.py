@@ -132,7 +132,7 @@ def main(args):
     if not os.path.exists(storage_path):
         os.makedirs(storage_path)
 
-    np.save(file=f"{storage_path}/weights.npy", arr=coefficients)    
+    np.save(file=f"{storage_path}/weights_{args.split}.npy", arr=coefficients)    
 
     mlflow.log_metric("cindex_tabular", cindex[0])
     mlflow.log_metric("cindex_tabular_val", cindex_val[0])

@@ -13,9 +13,11 @@ from torch.autograd import Variable
 from torchvision.utils import save_image
 
 from src.data import utils
-from src.data.utils import get_dataloader
+from src.data.utils import get_dataloader, generated_colored_bs_img
 from src.data.adni import ADNI
-from src.data.sim_coxph import SimCoxPH
+# from src.data.sim_coxph import SimCoxPH
+from src.data.sim_mnist import SimMNIST
+from src.data.sim_images import SimImages
 from src.postprocessing import plot_train_progress
 from src.dsap.dsap import DSAP
 from src.dsap.coalition_policies.playergenerators import *
@@ -67,6 +69,10 @@ class DeepSurvExperiment(pl.LightningModule):
         self.experiment_name = experiment_name
         self.trial = trial
 
+        # riskscore tracking
+        self.rs_train = []
+        self.rs_val = []
+
         # initialize parameters for baseline generation
         self.discriminator = DiscriminatorADNI if self.params['dataset'] == 'adni' else DiscriminatorSIM
         self.generator = GeneratorADNI if self.params['dataset'] == 'adni' else GeneratorSIM
@@ -80,8 +86,8 @@ class DeepSurvExperiment(pl.LightningModule):
         return self.model(*args, **kwargs)
 
     def training_step(self, batch, batch_idx):
-        #pdb.set_trace()
         y_pred = self.forward(**batch)
+
         train_loss = self.model._loss_function(batch['event'], batch['riskset'], predictions=y_pred)
 
         train_loss = {'loss': train_loss}
@@ -90,7 +96,7 @@ class DeepSurvExperiment(pl.LightningModule):
                             columns=[key for key in train_loss.keys()])
 
         self.train_history = self.train_history.append(train_history, ignore_index=True)
-
+        
         return train_loss
 
     def train_epoch_end(self, outputs):
@@ -171,9 +177,6 @@ class DeepSurvExperiment(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
 
-        # where/when to set grad_enabled = True?
-        torch.set_grad_enabled(True)
-
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean().to(torch.double)
         avg_loss = avg_loss.cpu().detach().numpy() + 0 
 
@@ -184,12 +187,9 @@ class DeepSurvExperiment(pl.LightningModule):
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/validation/")
             plot_train_progress(self.val_cindex, 
                                 storage_path=f"logs/{self.run_name}/{self.params['dataset']}/val_cindex")
-            # plot_train_progress(self.train_cindex, 
-            #                     storage_path=f"logs/{self.run_name}/{self.params['dataset']}/train_cindex")
         except:
             pass
         
-
         for part in ['train', 'val', 'test']:
             if self.params['base_folder'] == "adni_slices" and part == 'train':
                 continue 
@@ -207,59 +207,10 @@ class DeepSurvExperiment(pl.LightningModule):
             evaluation_data = {**accumulated_batch, **eval_data1, **eval_data}
             self.model.get_metrics(**evaluation_data, part=part)
 
+            self.model.plot_riskscores(evaluation_data['riskscores'], storage_path=f"./hist/{part}_data", run_name=self.run_name, epoch=self.current_epoch)
+
             del data_gen, eval_data1, accumulated_batch, eval_data, evaluation_data
-
-
-        # print("EVALUATION!!!!!!")
-        # if self.params['base_folder'] == "adni_slices":
-        #     pass
-        # else:
-        #     train_gen, eval_data_train1 = get_dataloader(root='./data',
-        #                                                 part='train',
-        #                                                 transform=False,
-        #                                                 base_folder=self.params['base_folder'],
-        #                                                 data_type=self.params['data_type'],
-        #                                                 batch_size=-1,
-        #                                                 split=self.split)
-        #     accumulated_batch_train = self.model._accumulate_batches(data=train_gen)
-        #     eval_data_train = utils.get_eval_data(batch=accumulated_batch_train,
-        #                                           model=self.model)
-        #     evaluation_data_train = {**accumulated_batch_train, **eval_data_train1, **eval_data_train}
-        #     self.model.get_metrics(**evaluation_data_train, part='train')
-
-        #     #del train_gen, eval_data_train1, accumulated_batch_train, eval_data_train, evaluation_data_train
-
-
-        # val_gen, eval_data_val1 = get_dataloader(root='./data',
-        #                                         part='val',
-        #                                         transform=False,
-        #                                         base_folder=self.params['base_folder'],
-        #                                         data_type=self.params['data_type'],
-        #                                         batch_size=-1,
-        #                                         split=self.split)
-        # accumulated_batch_val = self.model._accumulate_batches(data=val_gen)
-        # eval_data_val = utils.get_eval_data(batch=accumulated_batch_val,
-        #                                     model=self.model)
-        # evaluation_data_val = {**accumulated_batch_val, **eval_data_val1, **eval_data_val}
-        # self.model.get_metrics(**evaluation_data_val, part='val')
-
-        # #del val_gen, eval_data_val1, accumulated_batch_val, eval_data_val, evaluation_data_val
-
-        # test_gen, eval_data_test1 = get_dataloader(root='./data',
-        #                                             part='test',
-        #                                             transform=False,
-        #                                             base_folder=self.params['base_folder'],
-        #                                             data_type=self.params['data_type'],
-        #                                             batch_size=-1,
-        #                                             split=self.split)        
-        # accumulated_batch_test = self.model._accumulate_batches(data=test_gen)
-        # eval_data_test = utils.get_eval_data(batch=accumulated_batch_test,
-        #                                      model=self.model)
-        # evaluation_data_test = {**accumulated_batch_test, **eval_data_test1, **eval_data_test}
-        # self.model.get_metrics(**evaluation_data_test, part='test')
         
-        #del test_gen, eval_data_test1, accumulated_batch_test, eval_data_test, evaluation_data_test
-
         # log metrics
         try:
             self.logger.experiment.log_metric(key='avg_test_loss',
@@ -291,11 +242,24 @@ class DeepSurvExperiment(pl.LightningModule):
         except:
             pass
         
+        print(self.model.scores)
 
-        # store model 
-        if self.model_name == "Baseline":
-            torch.save(self.model.deep.state_dict(), "model_weights")
+        if self.params['dataset'] == 'adni':
+            storage_path = os.path.expanduser(f'linear_weights/{self.run_name}')
+            if not os.path.exists(storage_path):
+                os.makedirs(storage_path)
+            coefficients =  self.model.linear.weight.data[:, :self.model.structured_input_dim].cpu().detach().numpy()
+            np.save(file=f"{storage_path}/weights_deep_{self.split}.npy", arr=coefficients)    
             return {'avg_loss': avg_loss}
+
+        # store model
+        storage_path = os.path.expanduser(f'survival_model')
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+        torch.save(self.model.state_dict(), f"{storage_path}/sm_{self.run_name}")
+
+        # where/when to set grad_enabled = True?
+        torch.set_grad_enabled(True)
 
         print("BASELINE GENERATOR")
         train_gen, _ = get_dataloader(root='./data',
@@ -304,7 +268,8 @@ class DeepSurvExperiment(pl.LightningModule):
                                       base_folder=self.params['base_folder'],
                                       data_type=self.params['data_type'],
                                       batch_size=self.params['batch_size'],
-                                      split=self.split)
+                                      split=self.split,
+                                      cox_collate=False)
         
         val_gen, _ = get_dataloader(root='./data',
                                     part='val',
@@ -312,8 +277,18 @@ class DeepSurvExperiment(pl.LightningModule):
                                     base_folder=self.params['base_folder'],
                                     data_type=self.params['data_type'],
                                     batch_size=self.params['batch_size'],
-                                    split=self.split)
+                                    split=self.split,
+                                    cox_collate=False)
 
+        test_gen, _ = get_dataloader(root='./data',
+                                     part='test',
+                                     transform=False,
+                                     base_folder=self.params['base_folder'],
+                                     data_type=self.params['data_type'],
+                                     batch_size=self.params['batch_size'],
+                                     split=self.split,
+                                     cox_collate=False)
+        
         # train baseline generator 
         baseline_generator = BaselineGenerator(discriminator=self.discriminator,
                                                generator=self.generator,
@@ -324,83 +299,10 @@ class DeepSurvExperiment(pl.LightningModule):
                                                generator_params=self.baseline_params['generator_params'],
                                                discriminator_params=self.baseline_params['discriminator_params'],
                                                trainer_params=self.baseline_params['trainer_params'],
-                                               logging_params=self.baseline_params['logging_params'])
+                                               logging_params=self.baseline_params['logging_params'],
+                                               rgb_trained=False if self.params['base_folder'] in ['sim_cont', 'sim_cont_mult'] else True)
 
-        baseline_generator.train(train_gen=train_gen, val_gen=val_gen)
-        pdb.set_trace()
-        # validate baseline generator
-        baseline_generator.validate(val_gen=self.val_gen)
-        
-        baseline_images = baseline_generator.test(batch=accumulated_batch_test)
-        baseline_images = baseline_generator.test(batch=sample_batch)
-        
-        zero_baseline_images = torch.zeros(sample_batch['images'].shape).to(self.new_device).float()
-
-        # ##################################################################################################
-        # ## derive feature attributions
-        
-        # images, tabular_data = sample_batch['images'], sample_batch['tabular_data']
-
-        # # 1.) Calculate Integrated Gradients
-        # IG = IntegratedGradients()
-        # integrated_gradients = IG.integrated_gradients(model=self.model,
-        #                                                images=images,
-        #                                                tabular_data=tabular_data,
-        #                                                length=9,
-        #                                                baseline=baseline_images,
-        #                                                storage_path="euclidean_morph",
-        #                                                run_name=self.run_name)
-
-        # self.model.visualize_attributions(images=images, 
-        #                                   attributions=integrated_gradients,
-        #                                   method='integrated_gradient',
-        #                                   storage_path="attributions",
-        #                                   run_name=self.run_name)
-
-        # wasserstein_ig = IG.wasserstein_integrated_gradients(model=self.model,
-        #                                                      images=images,
-        #                                                      baseline=baseline_images,
-        #                                                      length=9, 
-        #                                                      tabular_data=tabular_data,
-        #                                                      storage_path="wasserstein_morph",
-        #                                                      run_name=self.run_name)
-
-
-        # self.model.visualize_attributions(images=images,
-        #                                   attributions=wasserstein_ig,
-        #                                   method='wasserstein_ig',
-        #                                   storage_path='attributions',
-        #                                   run_name=self.run_name)
-
-        # # 2.) Calculate approximate Shapley Values
-        # lpdn_model = self.model._build_lpdn_model()
-
-        # dsap = DSAP(player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data), windows=False),
-        #             input_shape=images[0].shape,
-        #             lpdn_model=lpdn_model)
-        # shapley_attributions = dsap.run(images=images, 
-        #                                 tabular_data=tabular_data,
-        #                                 baselines=baseline_images, 
-        #                                 steps=50)
-        # self.model.visualize_attributions(images=images, 
-        #                                   attributions=shapley_attributions,
-        #                                   method='shapley',
-        #                                   storage_path='attributions',
-        #                                   run_name=self.run_name)
-
-        # # 3.) Calculate Occlusion
-        # occlusion = Occlusion(model=self.model,
-        #                       player_generator=WideDeepPlayerIterator(ground_input=(images, tabular_data), 
-        #                                                               windows=False))
-        # occ_attributions = occlusion.run(images=images,
-        #                                  tabular_data=tabular_data,
-        #                                  baselines=baseline_images)
-        # self.model.visualize_attributions(images=images,
-        #                                   attributions=occ_attributions,
-        #                                   method='occlusion',
-        #                                   storage_path='attributions',
-        #                                   run_name=self.run_name)
-
+        baseline_generator.train(train_gen=train_gen, val_gen=val_gen, test_gen=test_gen)
 
         return {'avg_test_loss': avg_loss}
 
@@ -414,7 +316,7 @@ class DeepSurvExperiment(pl.LightningModule):
             else:
                 model.apply(weight_init)
                 os.system(f"python ./sksurv_train.py --download True --seed {self.log_params['manual_seed']} --experiment_name {self.experiment_name} --run_name {self.run_name} --split {self.split}")
-                linear_coefficients = np.load(file="./linear_weights/weights.npy").astype('float64')
+                linear_coefficients = np.load(file=f"./linear_weights/weights_{self.split}.npy").astype('float64')
                 linear_coefficients = np.expand_dims(linear_coefficients, axis=0)
 
             try:
@@ -474,6 +376,7 @@ class DeepSurvExperiment(pl.LightningModule):
         """
         """
 
+
         if self.params['dataset'] == 'adni':
             train_data = ADNI(root='./data',
                               part='train',
@@ -491,11 +394,18 @@ class DeepSurvExperiment(pl.LightningModule):
                                         shuffle=True)
         else:
             if self.params['data_type'] == 'coxph':
-                train_data = SimCoxPH(root='./data',
-                                      part='train',
-                                      base_folder=self.params['base_folder'],
-                                      data_type=self.params['data_type'],
-                                      n_dim=self.params['n_dim'])
+                if self.params['base_folder'] in ['mnist', 'mnist3d']:
+                    train_data = SimMNIST(root='./data',
+                                          part='train',
+                                          base_folder=self.params['base_folder'],
+                                          data_type=self.params['data_type'],
+                                          n_dim=self.params['n_dim'])
+                else:
+                    train_data = SimImages(root='./data',
+                                           part='train',
+                                           base_folder=self.params['base_folder'],
+                                           data_type=self.params['data_type'],
+                                           n_dim=self.params['n_dim'])
                 train_gen = DataLoader(dataset=train_data,
                                             batch_size=self.params['batch_size'],
                                             collate_fn=utils.cox_collate_fn,
@@ -523,11 +433,18 @@ class DeepSurvExperiment(pl.LightningModule):
                                        shuffle=False)
         else:
             if self.params['data_type'] == 'coxph':
-                val_data = SimCoxPH(root='./data',
-                                    part='val',
-                                    base_folder=self.params['base_folder'],
-                                    data_type=self.params['data_type'],
-                                    n_dim=self.params['n_dim'])
+                if self.params['base_folder'] in ['mnist', 'mnist3d']:
+                    val_data = SimMNIST(root='./data',
+                                        part='val',
+                                        base_folder=self.params['base_folder'],
+                                        data_type=self.params['data_type'],
+                                        n_dim=self.params['n_dim'])
+                else:
+                    val_data = SimImages(root='./data',
+                                         part='val',
+                                         base_folder=self.params['base_folder'],
+                                         data_type=self.params['data_type'],
+                                         n_dim=self.params['n_dim'])
                 val_gen = DataLoader(dataset=val_data,
                                     batch_size=self.params['batch_size'],
                                     collate_fn=utils.cox_collate_fn,
@@ -554,11 +471,18 @@ class DeepSurvExperiment(pl.LightningModule):
                                        shuffle=False)
         else:
             if self.params['data_type'] == 'coxph':
-                test_data = SimCoxPH(root='./data',
-                                    part='test',
-                                    base_folder=self.params['base_folder'],
-                                    data_type=self.params['data_type'],
-                                    n_dim=self.params['n_dim'])
+                if self.params['base_folder'] in ['mnist', 'mnist3d']:
+                    test_data = SimMNIST(root='./data',
+                                          part='test',
+                                          base_folder=self.params['base_folder'],
+                                          data_type=self.params['data_type'],
+                                          n_dim=self.params['n_dim'])
+                else:
+                    test_data = SimImages(root='./data',
+                                           part='test',
+                                           base_folder=self.params['base_folder'],
+                                           data_type=self.params['data_type'],
+                                           n_dim=self.params['n_dim'])
                 test_gen = DataLoader(dataset=test_data,
                                     batch_size=self.params['batch_size'],
                                     collate_fn=utils.cox_collate_fn,
