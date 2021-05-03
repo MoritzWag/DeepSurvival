@@ -5,11 +5,13 @@
 ## Introduction
 This GitHub repository is developed by Moritz Wagner. This project introduces the `Baseline Generator`. 
 To make predictions interpretable, Shapley values depict a prominent choice. Yet, computing Shapley values relies on a specification of a baseline against which the original prediction is compared. 
-To identify a suitable baseline is still an (seemingly) unsolved challenge. The literature refers to that as the `baseline selection problem`.
+To identify a suitable baseline is still an (seemingly) unsolved challenge. The literature refers to that as the [`baseline selection problem`](https://distill.pub/2020/attribution-baselines/).
 
 Within this project, I implemented the `Baseline Generator` to address this challenge within the setting of survival analysis.
 While the general idea of this framework is likely applicable to more complex settings, I have limited myself to verify the framework on simulated data.
 
+Further, I trained a multi-modal Deep Cox-PH model on the [ADNI data](http://adni.loni.usc.edu/). Yet, instead of training on the available 3D MRIs, I trained merely on 2D slices of the coronal plane of the MRIs.
+The 2D-slices were further complemented by the available tabular biomarker data. This procedure builds on the approach by [Pölsterl et al (2019)](https://arxiv.org/pdf/1909.03890.pdf).
 
 ## Code Structure
 This framework is structured as follows:
@@ -53,8 +55,8 @@ This file contains the class `DeepSurvExperiment`. This class builds on the gene
 The whole training procedure for all models/experiments is defined within this class.
 
 This includes:
-1. Training a Deep Cox-PH model on heterogenous data (image and tabular data). 
-2. Evaluation of the model performance with concordance index [https://scikit-survival.readthedocs.io/en/latest/api/generated/sksurv.metrics.concordance_index_censored.html](c-index). 
+1. Training a Deep Cox-PH model on heterogenous data (image and tabular data). It works on both ADNI and Simulation data.
+2. Evaluation of the model performance with concordance index ([c-index](https://scikit-survival.readthedocs.io/en/latest/api/generated/sksurv.metrics.concordance_index_censored.html)). 
 2. Training the `Baseline Generator` to generate for each image the optimal and unique baseline.
 
 ### `explainer.py`
@@ -100,6 +102,7 @@ You can setup `Deep Survival` as follows: Note, all commands must be run from th
 3. Clone this repository 
 4. Install the required packages via `pip install -r requirements.txt`
 5. Install the local package `src` as described above. 
+6. Install: `pip install git+https://github.com/MoritzWag/LPDN.git` (this is a prerequisite to calculate [DSAP](https://arxiv.org/pdf/1903.10992.pdf)). This, however, is currently in a development stage.
 
 
 ## Run Experiments 
@@ -117,7 +120,7 @@ All experiments are then conducted and evaluated with 5-fold cross-validation.
 For running the experiments on the simulated data, I distinguish between two simulation settings:
 
 #### Simulation 1 (Colored Rectangles)
-1. `python run.py --configs/SIM/coloredrectangles.yaml experiment_name --sim1 --run_name sim1`
+1. `python run.py --configs/SIM/coloredrectangles.yaml --experiment_name sim1 --run_name sim1`
     * trains survival model
     * trains the `Baseline Generator` and generates baseline images on the test data
 2. Evaluate visually after which training step the `Baseline Generator` generates the best baselines. 
@@ -126,4 +129,4 @@ For running the experiments on the simulated data, I distinguish between two sim
     * computes and visualizes sampled Shapley values
 
 #### Simulation 2 (Colored Geometric Shapes)
-1. `python run.py --configs/SIM/coloredshapes.yaml experiment_name --sim2 --run_name sim2`
+1. `python run.py --configs/SIM/coloredshapes.yaml --experiment_name sim2 --run_name sim2`
