@@ -179,8 +179,6 @@ class SimMNIST(SimCoxPH):
         
         x1 = np.repeat(1.0, num_obs)
         x2 = np.repeat(2.0, num_obs)
-        # x1 = random.uniform(-2, 3, size=num_obs)
-        # x2 = random.uniform(0, 5, size=num_obs)
 
         df = pd.DataFrame(data={'riskgroup': riskgroups, 'x1': x1, 'x2': x2})
 

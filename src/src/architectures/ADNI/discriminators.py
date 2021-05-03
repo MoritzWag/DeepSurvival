@@ -4,12 +4,12 @@ import pdb
 import torch.nn.functional as F
 
 from torch import nn 
-from src.architectures.ADNI.utils import (ACTIVATION,
-                                          conv2d_block, 
-                                          conv2d_bn_block, 
-                                          dense_layer_bn, 
-                                          conv3d_block,
-                                          conv3d_bn_block)
+from src.architectures.utils import (ACTIVATION,
+                                     conv2d_block, 
+                                     conv2d_bn_block, 
+                                     dense_layer_bn, 
+                                     conv3d_block,
+                                     conv3d_bn_block)
 
 
 class DiscriminatorADNI(nn.Module):

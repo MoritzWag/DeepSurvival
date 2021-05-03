@@ -90,17 +90,6 @@ class BaseModel(ABC, Evaluator, Visualizer):
             batches[f"batch_{i}"] = acc_batch
         
         return batches
-    
-    # def _sample_batch(self, data, num_obs):
-    #     """
-    #     """
-    #     acc_batch = self._accumulate_batches(data=data)
-    #     indeces = torch.randint(0, acc_batch['images'].shape[0] - 1, size=(num_obs, ))
-        
-    #     for value, key in zip(acc_batch.values(), acc_batch.keys()):
-    #         acc_batch[key] = value[indeces]
-        
-    #     return acc_batch, indeces
 
     def _build_lpdn_model(self):
         """
@@ -145,19 +134,6 @@ class BaseModel(ABC, Evaluator, Visualizer):
             lpdn_model.load_state_dict(state_dict, strict=False)
             
         return lpdn_model 
-
-    def save_model(self):
-        pass 
-
-    def load_model(self):
-        pass
-
-    def save_weights(self):
-        pass 
-
-    def load_weights(self):
-        pass
-
 
 
 class LPModel(nn.Module):

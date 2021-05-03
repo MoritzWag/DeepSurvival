@@ -356,9 +356,6 @@ class ADNI(data.Dataset):
 
 
         indeces = np.arange(X_train.shape[0])
-        # kf = KFold(n_splits=self.num_cvsplits)
-        # kf.get_n_splits(indeces)
-        #pdb.set_trace()
         kf = StratifiedKFold(n_splits=self.num_cvsplits)
         kf.get_n_splits(df_train, y=df_train['event'])
 
@@ -382,51 +379,6 @@ class ADNI(data.Dataset):
                 np.save(file=f"{storage_path_val_split}/image_{idx}.npy", arr=img)
             df_v.to_csv(f"{self.final_path}/df_val_{split}.csv")
             split += 1
-
-        
-
-        # for split in range(self.num_cvsplits):
-        #     print(f"generate split number: {split+1}/{self.num_cvsplits}")
-        #     pdb.set_trace()
-        #     seed = np.random.seed(self.seed)
-        #     print(seed)
-
-        #     #split dataframes in val, train, and test
-        #     X_train, X_val, df_train, df_val = train_test_split(images, df_scaled,
-        #                                                         train_size=int(0.8*df_scaled.shape[0]),
-        #                                                         random_state=seed)
-
-        #     X_val, X_test, df_val, df_test = train_test_split(X_val, df_val,
-        #                                                     train_size=int(0.5*df_val.shape[0]),
-        #                                                     random_state=seed)
-
-
-        #     storage_path_train_split = os.path.join(storage_path_train, f"split_{split}")
-        #     os.mkdir(storage_path_train_split)
-
-        #     for idx in range(X_train.shape[0]):
-        #         img = X_train[idx]
-        #         np.save(file=f"{storage_path_train_split}/image_{idx}.npy", arr=img)
-
-        #     storage_path_val_split = os.path.join(storage_path_val, f"split_{split}")
-        #     os.mkdir(storage_path_val_split)
-
-        #     for idx in range(X_val.shape[0]):
-        #         img = X_val[idx]
-        #         np.save(file=f"{storage_path_val_split}/image_{idx}.npy", arr=img)
-
-        #     storage_path_test_split = os.path.join(storage_path_test, f"split_{split}")
-        #     os.mkdir(storage_path_test_split)
-
-        #     for idx in range(X_test.shape[0]):
-        #         img = X_test[idx]
-        #         np.save(file=f"{storage_path_test_split}/image_{idx}.npy", arr=img)
-
-        #     # save dataframes
-        #     df_val.to_csv(f"{self.final_path}/df_val_{split}.csv")
-        #     df_train.to_csv(f"{self.final_path}/df_train_{split}.csv")
-        #     df_test.to_csv(f"{self.final_path}/df_test_{split}.csv")
-
     
     def load_dataset(self, path, part, split):
         """
@@ -459,9 +411,6 @@ class ADNI(data.Dataset):
     def generate_survival_times(self, age):
         """
         """
-        # maybe try different normalization !!!! => (-1, 1)
-        # and then only one factor to multiply with !!!
-        # age_norm = (age - 50.0) / 50.0
 
         age_norm = 2 * (age - np.min(age)) / (np.max(age) - np.min(age)) - 1
         
@@ -472,13 +421,6 @@ class ADNI(data.Dataset):
         epsilon = random.uniform(0, 2, size=age.shape[0])
 
         riskscores = 4.0 * age_norm + epsilon
-        # riskscores = 25 * age_norm * (age >= 90) \
-        #             + 15 * age_norm * ((age >= 85) & (age < 90)) \
-        #             + 5 * age_norm * ((age >= 75) & (age < 85)) \
-        #             - 15 * age_norm * ((age >= 70) & (age < 75)) \
-        #             - 25 * age_norm * ((age >= 60) & (age < 70)) + epsilon
-        # pdb.set_trace()
-        # riskscores = 1.5 * age 
         baseline_hazard = 1. / self.mean_survival_time
         scale = baseline_hazard * np.exp(riskscores)
         u = random.uniform(low=0, high=1, size=age.shape[0])

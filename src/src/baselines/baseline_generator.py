@@ -146,8 +146,6 @@ class BaselineGenerator(nn.Module):
                 batch = next(train_gen_iter)
             images = batch['images'].float().to(self.device)
             tabular_data = batch['tabular_data'].float().to(self.device)
-            # images = batch[0].float().to(self.device)
-            # tabular_data = batch[1].float().to(self.device)
 
             # derive labels for batch
             label_target, label_origin = self.generate_labels(images=images, 

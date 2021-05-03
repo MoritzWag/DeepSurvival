@@ -90,7 +90,5 @@ class ResidualClassifier(nn.Module):
         out = self.flatten(out)
         out = self.linear(out)
         out = self.relu(out)
-        # out = self.relu(self.bn(out))
-        #out = self.tanh(out)
-
+        
         return out

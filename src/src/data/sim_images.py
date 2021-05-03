@@ -104,10 +104,6 @@ class SimImages(SimCoxPH):
                                                                                              pos_random=True,
                                                                                              num_shapes=3)
             elif self.base_folder == "sim_rr":
-                # X_train, X_test, labels_train, labels_test = self.simulate_rotated_rectangles(img_size=64,
-                #                                                                               num_obs=self.num_obs,
-                #                                                                               n_dim=self.n_dim,
-                #                                                                               pos_random=True)
                 X_train, X_test, labels_train, labels_test = self.simulate_circle(img_size=28,
                                                                                   num_obs=self.num_obs,
                                                                                   n_dim=self.n_dim,
@@ -298,11 +294,9 @@ class SimImages(SimCoxPH):
                                             n_dim=n_dim,
                                             pos_random=pos_random)
             
-            # img = img.reshape(28, 28, 3)
             img = np.transpose(img, axes=(1, 2, 0))
             img = rgb2hsl(img)
             img = np.transpose(img, axes=(2, 0, 1))
-            # img = img.reshape(3, 28, 28)
             images_final.append(img)
             
         images_final = np.stack(images_final)
@@ -324,28 +318,17 @@ class SimImages(SimCoxPH):
         """
         """
         rand = np.random.RandomState(self.seed)
-        #colors_rgb = [(255, 4, 0), (255, 132, 0), (255, 247, 0), (144, 255, 0), (34, 255, 0), (0, 183, 255), (8, 0, 255)]
         gray_scale = 0.5
         radiuses = rand.randint(2, 12, size=num_obs)
-        #n_groups = len(colors_rgb)
-        # groups = rand.randint(n_groups, size=num_obs)
-        # gray_scale = 190
-        # color_assignment = []
-        # for i in groups:
-        #     color_assignment.append(colors_rgb[i])
-        
+
         images_final = []
         for i in range(num_obs):
-            #color = color_assignment[i]
             img = np.zeros((img_size, img_size, 1), dtype='float32')
             img[:, :] = gray_scale
             radius = radiuses[i]
             center = (14, 14)
-            #center = (rand.randint(low=20, high=30, size=1), rand.randint(low=20, high=30, size=1))
             img = cv2.circle(img, center, radius, (0, 0, 0), thickness=-1)
             img = np.transpose(img, axes=(2, 0, 1))
-            #img = img.reshape(1, img_size, img_size)
-            #img = img / 255. 
             images_final.append(img)
         
         images_final = np.stack(images_final)
@@ -366,18 +349,12 @@ class SimImages(SimCoxPH):
         """
         """
         rand = np.random.RandomState(self.seed)
-        #colors_rgb = [(255, 4, 0), (255, 132, 0), (255, 247, 0), (144, 255, 0), (34, 255, 0), (0, 183, 255), (8, 0, 255)]
         lengths = rand.randint(3, 20, size=num_obs)
-        #n_groups = len(colors_rgb)
-        #groups = rand.randint(n_groups, size=num_obs)
         gray_scale = 190
         color_assignment = []
-        # for i in groups:
-        #     color_assignment.append(colors_rgb[i])
 
         images_final = []
         for i in range(num_obs):
-            #color = color_assignment[i]
             img = np.zeros((img_size, img_size, 1), dtype='float32')
             img[:, :] = gray_scale
             ang = random.randrange(0, 360, 10)
@@ -387,9 +364,6 @@ class SimImages(SimCoxPH):
             rr = RectangleRotated(P0, (W, H), ang)
             rr.draw(img)
             img = np.transpose(img, axes=(1, 2, 0))
-            # img = img.reshape(1, img_size, img_size)
-            #img = img / 255.
-            # img = self.minmax_normalize(img)
             images_final.append(img)
         
         images_final = np.stack(images_final)
@@ -441,8 +415,6 @@ def rectangle_mask(img_size,
                    seed=1328):
     
     random = np.random.RandomState(seed)
-    # x = np.random.randint(length, img_size)
-    # y = np.random.randint(img_size - length)
     x = random.randint(length, img_size)
     y = random.randint(img_size - length)
 
@@ -470,11 +442,6 @@ def triangle_mask(img_size,
     
     image = cv2.fillPoly(img, [points], color=color)
 
-    # image = np.transpose(image, axes=(2, 0, 1))
-    # image = image.reshape(n_dim, img_size, img_size)
-
-    print('worked triangle')
-
     return image
 
 def circle_mask(img_size,
@@ -493,11 +460,6 @@ def circle_mask(img_size,
         center = (random.randint(img_size - radius, size=1)[0], random.randint(img_size - radius, size=1)[0])
     
     img = cv2.circle(img, center, radius, color, thickness=-1)
-
-    # image = np.transpose(img, axes=(2, 0, 1))
-    # image = img.reshape(n_dim, img_size, img_size)
-
-    print("worked circle")
 
     return img
 
