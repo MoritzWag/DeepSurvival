@@ -45,6 +45,13 @@ def update_config(config, args):
         for key in config.keys():
             if config[key].__contains__(name):
                 config[key][name] = value
+            else:
+                try:
+                    for key2 in config[key].keys():
+                        if config[key][key2].__contains__(name):
+                            config[key][key2][name] = value
+                except:
+                    pass
 
         for key in config['baseline_params'].keys():
             try:

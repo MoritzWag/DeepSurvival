@@ -136,6 +136,11 @@ data/*
 ## logs 
 logs/*
 images/*
+hist/*
+linear_weights/*
+sim*/
+attributions/*
+survival_model/*
 
 
 ## mlruns

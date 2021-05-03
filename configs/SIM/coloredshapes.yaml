@@ -60,11 +60,11 @@ baseline_params:
         sample_step: 500
         tolerance: 0.001
         alpha: 0.6
-        lambda_cls: 400.0
+        lambda_cls: 500.0
         lambda_rec: 2.0
         lambda_gp: 10.0
     logging_params:
-        storage_path: 'sim_copxh_color_target_cls_shapes10'
+        storage_path: 'sim_copxh_color_target_cls_shapes13'
         run_name: 'sim'
 
 trainer_params:

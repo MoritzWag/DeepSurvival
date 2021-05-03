@@ -244,7 +244,7 @@ class DeepSurvExperiment(pl.LightningModule):
         
         print(self.model.scores)
 
-        if self.params['dataset'] == 'adni':
+        if self.params['dataset'] == 'adni' and self.model_name is not "Baseline":
             storage_path = os.path.expanduser(f'linear_weights/{self.run_name}')
             if not os.path.exists(storage_path):
                 os.makedirs(storage_path)
@@ -258,9 +258,10 @@ class DeepSurvExperiment(pl.LightningModule):
             os.makedirs(storage_path)
         torch.save(self.model.state_dict(), f"{storage_path}/sm_{self.run_name}")
 
-        # where/when to set grad_enabled = True?
+        #where/when to set grad_enabled = True?
         torch.set_grad_enabled(True)
 
+        # here I need some more if statements!
         print("BASELINE GENERATOR")
         train_gen, _ = get_dataloader(root='./data',
                                       part='train',

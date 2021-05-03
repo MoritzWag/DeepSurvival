@@ -28,10 +28,10 @@ parser.add_argument('--max_epochs', type=int, default=None,
                     help="number of epochs (default: config file")
 parser.add_argument('--split', type=int, default=None,
                     help="determine which data split to use")
-
 parser.add_argument('--learning_rate', type=float, default=None,
                     help='learning rate for survival model')
-
+parser.add_argument('--orthogonalize', type=bool, default=False, 
+                    help="if True, then apply orthogonalization trick")
 #baseline params
 parser.add_argument('--alpha', type=float, default=None,
                     help="penalty for domain loss")

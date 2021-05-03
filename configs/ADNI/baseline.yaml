@@ -7,7 +7,7 @@ model_params:
         in_channels: 1
         dimensions: 2
         architecture: 'ResidualClassifier'
-        hidden_channels: [16, 32, 64, 128]
+        hidden_channels: [32, 64, 128, 256]
         kernel_sizes: [5, 3, 3, 3]
         strides: [2, 2, 2, 2]
         padding: [2, 1, 1, 1]

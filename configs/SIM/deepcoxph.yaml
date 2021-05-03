@@ -68,7 +68,7 @@ baseline_params:
         lambda_rec: 2.0
         lambda_gp: 10.0
     logging_params:
-        storage_path: 'sim_colored_rectangles2'
+        storage_path: 'sim_colored_rectangles3'
         run_name: 'sim'
 
 trainer_params:

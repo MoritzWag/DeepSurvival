@@ -27,10 +27,10 @@ class Visualizer(nn.Module):
         """
         if torch.is_tensor(images):
             images = images.cpu().detach().numpy()
-            #attributions = attributions.cpu().detach().numpy()
 
         fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(12, 12))
-        cmap_bound = np.abs(attributions).max()
+        #cmap_bound = np.abs(attributions).max()
+        cmap_bound = 0.15
 
         for i in range(len(images)):
 
@@ -94,18 +94,80 @@ class Visualizer(nn.Module):
         
         plt.savefig(f"{storage_path}/{method}.png", dpi=300, bbox_inches='tight')
 
-        attributions = self.overlay_function(images=images, 
-                                             attributions=attributions)
-        
+    def  visualize_all_attributions(self, 
+                                    images, 
+                                    ig_attributions, 
+                                    shapley_attributions,
+                                    rgb_trained,
+                                    storage_path,
+                                    run_name):
+        """
+        """
+        if torch.is_tensor(images):
+            images = images.cpu().detach().numpy()
 
+        fig, ax = plt.subplots(nrows=4, ncols=7, figsize=(12, 8))
+        cmap_bound = 0.15
+
+        for i in range(len(images)):
+
+            img = images[i, :, :, :]
+            img = np.transpose(img, axes=(1, 2, 0))
+            if not rgb_trained:
+                im = hsl2rgb(img)
+            
+            ax[i, 0].imshow(im, cmap='gray')
+            ax[i, 0].set_title('Original Image')
+
+            # attributions 
+            attr = list(ig_attributions.values())[0][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 1].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+            attr = list(ig_attributions.values())[1][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 2].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+            attr = list(ig_attributions.values())[2][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 3].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')#
+
+            attr = list(shapley_attributions.values())[0][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 4].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+            attr = list(shapley_attributions.values())[1][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 5].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+            attr = list(shapley_attributions.values())[2][i, :, :, :]
+            attr = np.transpose(attr, axes=(1, 2, 0))
+            attr = convert_to_grayscale(attr)
+            im = ax[i, 6].imshow(attr, vmin=-cmap_bound, vmax=cmap_bound, cmap='seismic')
+
+        ax[0, 1].set_title('IG: \n zero B/L')
+        ax[0, 2].set_title('IG: \n colored B/L')
+        ax[0, 3].set_title('IG: \n generatd B/L')
+        ax[0, 4].set_title('Shapley: \n zero B/L')
+        ax[0, 5].set_title('Shapley: \n colored B/L')
+        ax[0, 6].set_title('Shapley: \n generated B/L')
+
+        for ax in fig.axes:
+            ax.axis('off')
+
+        fig.suptitle("Attribution maps for different baseline choices")
+        fig.colorbar(im, cax=fig.add_axes([0.95, 0.25, 0.03, 0.5]))
         storage_path = os.path.expanduser(storage_path)
         storage_path = f"{storage_path}/{run_name}"
         if not os.path.exists(storage_path):
             os.makedirs(storage_path)
         
-        # vutils.save_image(attributions.data, 
-        #                   f"{storage_path}/{method}.png")
-
+        plt.savefig(f"{storage_path}/attributions.png", dpi=300, bbox_inches='tight')
 
     def overlay_function(self, images, attributions):
         return np.clip(0.7 * images + 0.5 * attributions, 0, 255)

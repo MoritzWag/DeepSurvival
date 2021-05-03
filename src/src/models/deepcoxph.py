@@ -39,6 +39,7 @@ class DeepCoxPH(BaseModel):
         else:
             features_concatenated = torch.cat((tabular_data, unstructured), axis=1)
         
+        # riskscore = self.linear(features_concatenated.float())
         riskscore = self.tanh(self.linear(features_concatenated.float()))
         
         return riskscore
@@ -58,36 +59,6 @@ class DeepCoxPH(BaseModel):
 
         return out
 
-    # def calculate_projection_matrix(self, matrix):
-    #     """To calculate the projection matrix of X, the following needs to be 
-    #     calculated: P = x*(xTx)^-1*xT. This can be achieved by applying the gram schmidt algorithm
-
-    #     Args:
-    #         matrix: {torch.Tensor} matrix for which the projection matrix needs to be identified. 
-        
-    #     Returns:
-    #         projection_matrix: {torch.Tensor} projection matrix
-    #     """
-    #     Q, R = torch.qr(matrix)
-    #     xTx_xT = torch.matmul(torch.inverse(R), Q.t())
-    #     projection_matrix = torch.matmul(matrix, xTx_xT)
-
-    #     pdb.set_trace()
-        #return projection_matrix.to(self.device)
-
-    # def calculate_projection_matrix(self, matrix):
-    #     """ H = X(XtX)-1X = QR(RTR)−1RTQT
-    #     """
-    #     pdb.set_trace()
-    #     Q, R = torch.qr(matrix)
-    #     QR = torch.matmul(Q, R)
-    #     RTR_inv = torch.inverse(torch.matmul(R.T, R))
-    #     RTQT = torch.matmul(R.T, Q.T)
-    #     QRRTR = torch.matmul(QR, RTR_inv)
-    #     proj_mat = torch.matmul(QRRTR, RTQT)
-
-    #     return proj_mat
-
     def calculate_projection_matrix(self, matrix):
         """
         """
@@ -96,7 +67,6 @@ class DeepCoxPH(BaseModel):
         CtC = XtX + dmat * 1e-09
 
         CtC = self.make_psd(CtC)
-        #pdb.set_trace()
         
         R = torch.cholesky(CtC, upper=True)
 
@@ -115,29 +85,6 @@ class DeepCoxPH(BaseModel):
         pm = torch.matmul(AAtA, A.T)
 
         return pm 
-        #pdb.set_trace()
-
-
-    
-    # def calculate_projection_matrix(self, matrix):
-    #     """Demmler-Reinsch Orthogonalization 
-    #     (cf. Ruppert er al. 2003, Semiparametric Regression, Appendix B.1.1)
-    #     """
-
-    #     XtX = torch.mm(matrix.t(), matrix)
-    #     dmat = torch.eye(XtX.shape[0]).to(self.device) * torch.diagonal(XtX)
-    #     CtC = XtX + dmat * 1e-09
-
-    #     CtC = self.make_psd(CtC)
-
-    #     pdb.set_trace()
-    #     # Rm = torch.solve(torch.cholesky(A), torch.diag(XtX.dim(1)))
-    #     chol = torch.cholesky(A)
-    #     eye = torch.eye(XtX.shape[1]).to(self.device)
-    #     Rm, _ = torch.solve(chol, eye)
-    #     #Rm = torch.solve(torch.cholesky(A), torch.eye(XtX.shape[1]).to(self.device))
-    #     dec = torch.svd(torch.matmul(torch.mm(Rm, dmat), Rm))
-
 
     def make_psd(self, x):
         """

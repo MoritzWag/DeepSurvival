@@ -96,9 +96,23 @@ def main(params, logging_params, args, survival_model):
     storage_path = os.path.expanduser(logging_params['storage_path'])
     storage_path = f"{storage_path}/{logging_params['run_name']}/test_results"
     bg_dict = np.load(f"{storage_path}/data_dict_{args.step}.npy", allow_pickle=True)
-
     
+    df = pd.DataFrame(columns=["prediction", "zero_baseline", "colored_baseline", "bg_baseline", 
+                                            "ig_zero", "ig_color", "ig_bg",
+                                            "shapley_zero", "shapley_color", "shapley_bg"])
+    preds = []
+    preds_zero = []
+    preds_colored = []
+    preds_bg = []
+    ig_zero_attr = []
+    shapley_zero_attr = []
+    ig_color_attr = []
+    shapley_color_attr = []
+    ig_bg_attr = []
+    shapley_bg_attr = []
+
     for sample_key in sample_batches:
+    
         sample_batch = sample_batches[sample_key]
         images, tabular_data, indeces = sample_batch['images'].to(device), sample_batch['tabular_data'].to(device), sample_batch['indeces']
 
@@ -112,6 +126,18 @@ def main(params, logging_params, args, survival_model):
 
         baseline_dict = {'zero_bs': zero_bs_images, 'colored_bs': colord_bs_images,
                         'bg_bs': bg_imgs}
+
+
+        # get delta for completeness estimation/verification
+        prediction = survival_model(tabular_data, images)
+        pred_zero = survival_model(tabular_data, zero_bs_images)
+        pred_colored = survival_model(tabular_data, colord_bs_images)
+        pred_bg = survival_model(tabular_data, bg_imgs)
+
+        preds.append(prediction.squeeze().cpu().detach().numpy())
+        preds_zero.append((prediction - pred_zero).squeeze().cpu().detach().numpy())
+        preds_colored.append((prediction - pred_colored).squeeze().cpu().detach().numpy())
+        preds_bg.append((prediction - pred_bg).squeeze().cpu().detach().numpy())
 
         # Initialize Integrated Gradients
         IG = IntegratedGradients()
@@ -127,18 +153,28 @@ def main(params, logging_params, args, survival_model):
         sv_sampler = ShapleySampling()
 
         # Loop through different baselines
+        ig_attributions = {}
+        shap_attributions = {}
+
         for key in baseline_dict:
 
             # Calculate Integrated Gradients
             print(f"Calculate Integrated Gradients for: {key}")
             integrated_gradients = IG.integrated_gradients(model=survival_model,
-                                                        images=images, 
-                                                        tabular_data=tabular_data,
-                                                        length=100,
-                                                        baseline=baseline_dict[key],
-                                                        storage_path="euclidean_morph",
-                                                        run_name=logging_params['run_name'])
+                                                           images=images,
+                                                           tabular_data=tabular_data,
+                                                           baseline=baseline_dict[key],
+                                                           n_steps=10000)
 
+            ig_attributions[key] = integrated_gradients
+
+            if key == "zero_bs":
+                ig_zero_attr.append(integrated_gradients.sum((1, 2, 3)).squeeze())
+            elif key == "colored_bs":
+                ig_color_attr.append(integrated_gradients.sum((1, 2, 3)).squeeze())
+            else:
+                ig_bg_attr.append(integrated_gradients.sum((1, 2, 3)).squeeze())
+            
             # Visualize IG attributions 
             survival_model.visualize_attributions(images=images,
                                                 attributions=integrated_gradients,
@@ -154,6 +190,8 @@ def main(params, logging_params, args, survival_model):
                                                         tabular_data=tabular_data,
                                                         baseline=baseline_dict[key],
                                                         n_steps=10)
+                            
+            shap_attributions[key] = shapley_attributions
 
             # Visualize sample shapley attributions
             survival_model.visualize_attributions(images=images,
@@ -162,6 +200,22 @@ def main(params, logging_params, args, survival_model):
                                                 method="shapley",
                                                 storage_path=f"attributions/{key}/{sample_key}",
                                                 run_name=logging_params['run_name'])
+
+            if key == "zero_bs":
+                shapley_zero_attr.append(shapley_attributions.sum((1, 2, 3)).squeeze())
+            elif key == "colored_bs":
+                shapley_color_attr.append(shapley_attributions.sum((1, 2, 3)).squeeze())
+            else:
+                shapley_bg_attr.append(shapley_attributions.sum((1, 2, 3)).squeeze())
+        
+        survival_model.visualize_all_attributions(images=images,
+                                                  ig_attributions=ig_attributions,
+                                                  shapley_attributions=shap_attributions,
+                                                  rgb_trained=False,
+                                                  storage_path=f"attributions/{sample_key}",
+                                                  run_name=logging_params['run_name'])
+            
+            
         if args.DSAP:
             for key in baseline_dict:
                 # Calculate approximate Shapley Values
@@ -182,6 +236,19 @@ def main(params, logging_params, args, survival_model):
                                                 method='dsap',
                                                 storage_path=f'attributions/{key}/{sample_key}',
                                                 run_name=args.run_name)
+    
+    df['prediction'] = np.concatenate(preds)
+    df['zero_baseline'] = np.concatenate(preds_zero)
+    df['colored_baseline'] = np.concatenate(preds_colored)
+    df['bg_baseline'] = np.concatenate(preds_bg)
+    df['ig_zero'] = np.concatenate(ig_zero_attr)
+    df['shapley_zero'] =  np.concatenate(shapley_zero_attr)
+    df['ig_color'] = np.concatenate(ig_color_attr)
+    df['shapley_color'] = np.concatenate(shapley_color_attr)
+    df['ig_bg'] = np.concatenate(ig_bg_attr)
+    df['shapley_bg'] = np.concatenate(shapley_bg_attr)
+
+    df.to_csv("attributions/completeness.csv")
 
 if __name__ == "__main__":
     main(params=params,
