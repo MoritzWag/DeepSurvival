@@ -69,18 +69,6 @@ class Evaluator(nn.Module):
 
         return survival
 
-    def get_hazards(self, **kwargs):
-        """
-        """
-        pass 
-    
-    def get_cumulative_hazard(self, hazard, index):
-        pass
-        
-    def get_baseline_hazard(self):
-        pass
-
-
     
         
 

@@ -31,7 +31,7 @@ parser.add_argument('--config', '-c',
                     dest='filename',
                     metavar='FILE',
                     help='path to config file',
-                    default='configs/MNIST/deepcoxph.yaml')
+                    default='configs/ADNI/deepcoxph.yaml')
 parser.add_argument('--experiment_name', type=str, default='deepsurv')
 parser.add_argument('--run_name', type=str, default='imgtab')
 parser.add_argument('--manual_seed', type=int, default=None,

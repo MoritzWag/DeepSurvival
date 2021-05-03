@@ -21,35 +21,18 @@ from src.integrated_gradients import IntegratedGradients
 from src.baselines.baseline_generator import BaselineGenerator
 from src.shapley_sampling import ShapleySampling
 
-from src.architectures.SIM.discriminators import DiscriminatorSIM
-from src.architectures.ADNI.discriminators import DiscriminatorADNI
-from src.architectures.SIM.map_generator import GeneratorSIM
-from src.architectures.ADNI.map_generator import GeneratorADNI
-
 
 parser = argparse.ArgumentParser(description="generic runner for Explainer")
 parser.add_argument('--config', '-c',
                     dest='filename',
                     metavar='FILE',
                     help='path to config file',
-                    default='configs/SIM/deepcoxph.yaml')
+                    default='configs/SIM/coloredrectangles.yaml')
 parser.add_argument('--run_name', type=str, default='deepsurv')
 parser.add_argument('--step', type=int, default=None,
                     help='step where baseline generator results were optimal')
 parser.add_argument('--DSAP', type=bool, default=False,
                     help='if True, calculate and visualize DSAP values')
-
-#baseline params
-parser.add_argument('--alpha', type=float, default=None,
-                    help="penalty for domain loss")
-parser.add_argument('--lambda_cls', type=float, default=None,
-                    help='loss weight for domain loss')
-parser.add_argument('--lambda_gp', type=float, default=None,
-                    help="loss weight for  gradient penalty")
-parser.add_argument('--lambda_rec', type=float, default=None,
-                    help='loss weight for reconstruction')
-parser.add_argument('--n_critic', type=int, default=None,
-                    help='number of generator steps per discriminator')
 parser.add_argument('--storage_path', type=str, default=None,
                     help="path to stored outputs of baseline generator")
 parser.add_argument('--PATH', type=str, default=None,
