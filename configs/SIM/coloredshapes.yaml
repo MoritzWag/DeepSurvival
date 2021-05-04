@@ -64,7 +64,7 @@ baseline_params:
         lambda_rec: 2.0
         lambda_gp: 10.0
     logging_params:
-        storage_path: 'sim_copxh_color_target_cls_shapes13'
+        storage_path: 'sim2'
         run_name: 'sim'
 
 trainer_params:
