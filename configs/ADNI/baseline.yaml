@@ -28,11 +28,8 @@ exp_params:
     n_dim: 1
     batch_size: 256
     optimizer: 'AdamW'
-    #learning_rate: 0.01
     learning_rate: 0.0000335
     scheduler_gamma: 0.99456
-    # weight_decay: 0.00000136
-    #weight_decay: 0.0004
     weight_decay: 13.13
     max_epochs: 50
     transforms: True
